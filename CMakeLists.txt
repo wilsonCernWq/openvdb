@@ -741,6 +741,12 @@ endif()
 
 ##########################################################################
 
+# VDB to HTG converter
+
+add_subdirectory(vdb2htg)
+
+##########################################################################
+
 add_custom_target(uninstall
   COMMAND ${CMAKE_COMMAND} -P ${PROJECT_SOURCE_DIR}/cmake/Uninstall.cmake
 )
