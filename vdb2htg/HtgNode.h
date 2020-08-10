@@ -44,16 +44,14 @@ inline float min(
 #include "../common/Data.h"
 #include "../common/math.h"
 #else
-#include "rkcommon/math/vec.h"
-#include "rkcommon/math/range.h"
 #include "rkcommon/math/box.h"
+#include "rkcommon/math/range.h"
+#include "rkcommon/math/vec.h"
 using namespace rkcommon::math;
 #endif
 
-namespace openvkl
-{ // some helper functions
-  namespace ispc_driver
-  {
+namespace openvkl {  // some helper functions
+  namespace ispc_driver {
 
     inline const char *c_str(const std::string &s)
     {
@@ -70,7 +68,7 @@ namespace openvkl
     std::string stringf(const std::string &format, Ts... rest)
     {
       ssize_t sz = snprintf(NULL, 0, format.c_str(), c_str(rest)...);
-      char *bf = static_cast<char *>(malloc(sz + 1));
+      char *bf   = static_cast<char *>(malloc(sz + 1));
       snprintf(bf, sz + 1, format.c_str(), c_str(rest)...);
       std::string ret(bf);
       free(bf);
@@ -93,10 +91,10 @@ namespace openvkl
       return y;
     }
 
-  } // namespace ispc_driver
-} // namespace openvkl
+  }  // namespace ispc_driver
+}  // namespace openvkl
 
-#endif // defined(__cplusplus)
+#endif  // defined(__cplusplus)
 
 #if defined(ISPC)
 typedef unsigned int8 uint8_t;
@@ -112,11 +110,9 @@ typedef unsigned int64 uint64_t;
 #define __empty
 
 #if defined(__cplusplus)
-namespace openvkl
-{ // some helper functions
-  namespace ispc_driver
-  {
-#endif // defined(__cplusplus)
+namespace openvkl {  // some helper functions
+  namespace ispc_driver {
+#endif  // defined(__cplusplus)
 
 #if !defined(HTG_SHARE_INTERPOLATION_CODE)
     /*! enum to symbolically iterate the 8 corners of an octant */
@@ -151,10 +147,22 @@ namespace openvkl
       return *v;
     }
 
+    inline __varying double decodeFloat(__varying uint32_t i)
+    {
+      __varying float *__uniform v = (__varying float *__uniform) & i;
+      return *v;
+    }
+
+    inline __varying uint64_t encodeFloat(__varying float f)
+    {
+      __varying uint32_t *__uniform v = (__varying uint32_t * __uniform) & f;
+      return *v;
+    }
+
 #if defined(__cplusplus)
-  } // namespace ispc_driver
-} // namespace openvkl
-#endif // defined(__cplusplus)
+  }  // namespace ispc_driver
+}  // namespace openvkl
+#endif  // defined(__cplusplus)
 
 // #include "FormatStatic.h"
 #include "FormatStream.h"

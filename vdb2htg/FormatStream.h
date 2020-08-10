@@ -5,14 +5,14 @@
 
 #if defined(__cplusplus)
 // Platform: Linux
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/mman.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #endif
 
 // --------------------------------------------------------------------------------
@@ -22,10 +22,8 @@
 // --------------------------------------------------------------------------------
 
 #if defined(__cplusplus)
-namespace openvkl
-{
-  namespace ispc_driver
-  {
+namespace openvkl {
+  namespace ispc_driver {
 #endif
 
 // node encoding  (MSB) | ... data ... | ... flag ... | (LSB)
@@ -132,7 +130,7 @@ namespace openvkl
     return data(_encoded) >> HTG_OFF_CHILD_OFFSET;                             \
   }                                                                            \
                                                                                \
-  inline void setChildOffset(self, const __varying uint64_t &offset)           \
+  inline void setChildOffset(self, __varying uint64_t offset)                  \
   {                                                                            \
     assert(!isTerminatingNode(node));                                          \
     const uint64_t shifted_offset = offset << HTG_OFF_CHILD_OFFSET;            \
@@ -143,13 +141,15 @@ namespace openvkl
   {                                                                            \
     assert(isTerminatingNode(node)); /* give up mantissa bits */               \
     return decodeDouble(data(_encoded) & HTG_CLR_FLAGS);                       \
+    /*return decodeFloat(data(_encoded) >> 32U)*/;                             \
   }                                                                            \
                                                                                \
-  inline void setValue(self, const __varying double &value)                    \
+  inline void setValue(self, __varying float value)                            \
   {                                                                            \
     assert(isTerminatingNode(node)); /* save existing flags */                 \
     uint32_t flags = data(_encoded) & HTG_BIT_FLAGS;                           \
     data(_encoded) = (encodeDouble(value) & HTG_CLR_FLAGS) | flags;            \
+    /*data(_encoded) = (encodeFloat(value) << 32U) | flags;*/                  \
   }
 
 #define __htg_ptr_access(x) (node->x)
@@ -191,8 +191,7 @@ namespace openvkl
     {
       if (isValueRangeNode(node))
         return node->_range;
-      else
-      {
+      else {
         const uint64_t o = getChildOffset(node);
         const HtgNode *n = node + o + 8;
         return n->_range;
@@ -203,8 +202,7 @@ namespace openvkl
     {
       if (isValueRangeNode(node))
         return node._range;
-      else
-      {
+      else {
         const uint64_t o = getChildOffset(node);
         const HtgNode *n = &node + o + 8;
         return n->_range;
@@ -234,8 +232,8 @@ namespace openvkl
       _encoded = v;
     }
 
-  } // namespace ispc_driver
-} // namespace openvkl
+  }  // namespace ispc_driver
+}  // namespace openvkl
 #endif
 
 #undef __htg_ptr_access
@@ -250,20 +248,18 @@ namespace openvkl
 //
 // --------------------------------------------------------------------------------
 #if defined(__cplusplus)
-namespace openvkl
-{
-  namespace ispc_driver
-  {
+namespace openvkl {
+  namespace ispc_driver {
 
     // ----------------------------------------------------------------------------
     // Builder Implementation
     // ----------------------------------------------------------------------------
     struct HtgVoxels
     {
-    private:
+     private:
       size_t _size = 0;
 
-    public:
+     public:
       std::vector<vec3f> lower;
       std::vector<float> width;
       std::vector<unsigned char> value;
@@ -286,7 +282,7 @@ namespace openvkl
         *(lower.data() + index) = l;
         *(width.data() + index) = w;
         vtype *valueTyped = (vtype *)(value.data() + index * sizeof(vtype));
-        *valueTyped = v;
+        *valueTyped       = v;
         *(range.data() + index) = r;
       }
 
@@ -298,12 +294,11 @@ namespace openvkl
         lower.push_back(l);
         width.push_back(w);
         range.push_back(r);
-        for (int i = 0; i < sizeof(vtype); ++i)
-        {
+        for (int i = 0; i < sizeof(vtype); ++i) {
           value.push_back(0);
         }
         vtype *valueTyped = (vtype *)(value.data() + index * sizeof(vtype));
-        *valueTyped = v;
+        *valueTyped       = v;
       }
 
       size_t size() const
@@ -316,10 +311,8 @@ namespace openvkl
         HtgVoxels tmp;
         const size_t stride = value.size() / this->_size;
         // TODO do a SIMD version reduction
-        for (size_t a = 0; a != this->_size; ++a)
-        {
-          if (this->width[a] > 0.f)
-          {
+        for (size_t a = 0; a != this->_size; ++a) {
+          if (this->width[a] > 0.f) {
             tmp.lower.push_back(this->lower[a]);
             tmp.width.push_back(this->width[a]);
             tmp.range.push_back(this->range[a]);
@@ -340,14 +333,14 @@ namespace openvkl
     struct HtgBuilder
     {
       std::vector<HtgNode> data;
-      box3f actualBounds; // grid world bound
-      box3f extendBounds; // extend the dimension to pow of 2
+      box3f actualBounds;  // grid world bound
+      box3f extendBounds;  // extend the dimension to pow of 2
       size_t numVoxels;
 
       HtgBuilder(const box3f &bounds, const HtgVoxels &voxels, size_t numVoxels)
           : allVoxels(voxels), numVoxels(numVoxels)
       {
-        actualBounds = bounds;
+        actualBounds       = bounds;
         extendBounds.lower = actualBounds.lower;
         extendBounds.upper =
             reduce_max(vec3f(roundToPow2(actualBounds.upper.x),
@@ -366,9 +359,8 @@ namespace openvkl
 
       void experiment();
 
-    private:
+     private:
       const HtgVoxels &allVoxels;
-      // range1f overallValueRange = range1f(rkcommon::math::empty);
       size_t actualNumOfNodes = 0;
       size_t extendNumOfNodes = 0;
       size_t deactivatedNodes = 0;
@@ -383,19 +375,15 @@ namespace openvkl
 
       void deactivate_this_node(size_t i, int level, const int max_level)
       {
-        if (isInvalid(data[i]))
-        {
+        if (isInvalid(data[i])) {
           return;
         }
-        if (!isTerminatingNode(data[i]))
-        {
+        if (!isTerminatingNode(data[i])) {
           const auto offset = getChildOffset(data[i]);
-          for (int k = 0; k < 8; ++k)
-          {
+          for (int k = 0; k < 8; ++k) {
             deactivate_this_node(i + offset + k, level + 1, max_level);
           }
-          if (level >= max_level)
-          {
+          if (level >= max_level) {
             ++deactivatedNodes;
             const range1f r = getValueRange(data[i]);
             setAsEvicted(data[i], true);
@@ -449,8 +437,7 @@ namespace openvkl
 
       // compute the boxes for all 8 children
       box3f subBounds[8];
-      for (int i = 0; i < 8; i++)
-      {
+      for (int i = 0; i < 8; i++) {
         subBounds[i].lower = vec3f((i & 1) ? center.x : voxelBounds.lower.x,
                                    (i & 2) ? center.y : voxelBounds.lower.y,
                                    (i & 4) ? center.z : voxelBounds.lower.z);
@@ -458,11 +445,10 @@ namespace openvkl
       }
 
       // TODO optimize this section
-      std::vector<size_t> subVoxelIndex[8]; // voxels within each child the
+      std::vector<size_t> subVoxelIndex[8];  // voxels within each child the
       range1f subVoxelValueRange;
-      for (size_t i = 0; i < voxelNum; i++)
-      {
-        const size_t cVoxelIdx = (nodeId == 0) ? i : voxelIdx[i];
+      for (size_t i = 0; i < voxelNum; i++) {
+        const size_t cVoxelIdx  = (nodeId == 0) ? i : voxelIdx[i];
         const vec3f voxelCenter = this->allVoxels.lower[cVoxelIdx] -
                                   this->actualBounds.lower +
                                   0.5 * this->allVoxels.width[cVoxelIdx];
@@ -472,18 +458,15 @@ namespace openvkl
         childIdx |= voxelCenter.z < center.z ? 0 : 4;
         subVoxelIndex[childIdx].push_back(cVoxelIdx);
         subVoxelValueRange.extend(this->allVoxels.range[cVoxelIdx]);
-        // overallValueRange.extend(this->allVoxels.range[cVoxelIdx]);
       }
 
       // the child offset of the subtree root
       const size_t childOffset = data.size() - nodeId;
 
-      int childCount = 0;
+      int childCount     = 0;
       uint32_t childMask = 0;
-      for (int i = 0; i < 8; i++)
-      {
-        if (subVoxelIndex[i].size() != 0)
-        {
+      for (int i = 0; i < 8; i++) {
+        if (subVoxelIndex[i].size() != 0) {
           childMask |= 256 >> (8 - i);
           ++childCount;
         }
@@ -492,32 +475,26 @@ namespace openvkl
       // push children node into the buffer, initialize later.
       this->actualNumOfNodes += childCount;
       this->extendNumOfNodes += 9; /* 8 children + value range */
-      for (int i = 0; i < 8; i++)
-      {
+      for (int i = 0; i < 8; i++) {
         data.push_back(HtgNode());
-        data.back().set(-1); // by default, nodes are invalid
+        data.back().set(-1);  // by default, nodes are invalid
       }
-      data.push_back(HtgNode()); // value range
-      data.back().set(0);        // by default, nodes are invalid
+      data.push_back(HtgNode());  // value range
+      data.back().set(0);         // by default, nodes are invalid
       setAsValueRangeNode(data.back(), true);
       setValueRange(data.back(), subVoxelValueRange);
 
       // initialize children of the current node
-      for (int i = 0; i < 8; i++)
-      {
-        const int idx = i;
+      for (int i = 0; i < 8; i++) {
+        const int idx           = i;
         const size_t childIndex = nodeId + childOffset + i;
-        if (subVoxelIndex[idx].size() > 0)
-        {
-          data[childIndex].set(0); // validate the node
-          if (subVoxelIndex[idx].size() == 1)
-          {
+        if (subVoxelIndex[idx].size() > 0) {
+          data[childIndex].set(0);  // validate the node
+          if (subVoxelIndex[idx].size() == 1) {
             const double value = valueToDouble(subVoxelIndex[idx][0]);
             setAsLeaf(data[childIndex], 1);
             setValue(data[childIndex], value);
-          }
-          else
-          {
+          } else {
             const size_t offset = recursive(nodeId + childOffset + i,
                                             subBounds[idx],
                                             subVoxelIndex[idx].size(),
@@ -549,14 +526,15 @@ namespace openvkl
         BINARY_WRITE,
         BINARY_READ
       } type;
-      char *map = (char *)MAP_FAILED;
-      int fd = -1;
-      size_t p = 0;
-      size_t map_size = 0;
+      char *map        = (char *)MAP_FAILED;
+      int fd           = -1;
+      size_t p         = 0;
+      size_t map_size  = 0;
       size_t file_size = 0;
     };
 
-    inline FileMap filemap_write_create(const std::string &filename, size_t requested_size)
+    inline FileMap filemap_write_create(const std::string &filename,
+                                        size_t requested_size)
     {
       /* Open a file for writing.
        *  - Creating the file if it doesn't exist.
@@ -568,20 +546,18 @@ namespace openvkl
       FileMap ret;
       ret.type = FileMap::BINARY_WRITE;
 
-      int &fd = ret.fd;
+      int &fd    = ret.fd;
       char *&map = ret.map;
 
       fd = open(filename.c_str(), O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
 
-      if (fd == -1)
-      {
+      if (fd == -1) {
         throw std::runtime_error("Error opening file for writing");
       }
 
       // Stretch the file size to the size of the (mmapped) array of char
 
-      if (lseek(fd, requested_size - 1, SEEK_SET) == -1)
-      {
+      if (lseek(fd, requested_size - 1, SEEK_SET) == -1) {
         close(fd);
         throw std::runtime_error("Error calling lseek() to 'stretch' the file");
       }
@@ -591,57 +567,54 @@ namespace openvkl
        * Just writing an empty string at the current file position will do.
        *
        * Note:
-       *  - The current position in the file is at the end of the stretched 
+       *  - The current position in the file is at the end of the stretched
        *    file due to the call to lseek().
        *  - An empty string is actually a single '\0' character, so a zero-byte
        *    will be written at the last byte of the file.
        */
 
-      if (write(fd, "", 1) == -1)
-      {
+      if (write(fd, "", 1) == -1) {
         close(fd);
         throw std::runtime_error("Error writing last byte of the file");
       }
 
       // Now the file is ready to be mmapped.
-      map = (char *)mmap(0, requested_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      if (map == MAP_FAILED)
-      {
+      map = (char *)mmap(
+          0, requested_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      if (map == MAP_FAILED) {
         close(fd);
         throw std::runtime_error("Error mmapping the file");
       }
 
-      ret.map_size = requested_size;
+      ret.map_size  = requested_size;
       ret.file_size = requested_size;
       return ret;
     }
 
-    inline FileMap filemap_read_create(const std::string &filename, size_t requested_size = 0)
+    inline FileMap filemap_read_create(const std::string &filename,
+                                       size_t requested_size = 0)
     {
       FileMap ret;
       ret.type = FileMap::BINARY_READ;
 
-      int &fd = ret.fd;
+      int &fd    = ret.fd;
       char *&map = ret.map;
 
       fd = open(filename.c_str(), O_RDONLY, (mode_t)0600);
 
-      if (fd == -1)
-      {
+      if (fd == -1) {
         perror("Error opening file for writing");
         exit(EXIT_FAILURE);
       }
 
       struct stat fileInfo = {0};
 
-      if (fstat(fd, &fileInfo) == -1)
-      {
+      if (fstat(fd, &fileInfo) == -1) {
         perror("Error getting the file size");
         exit(EXIT_FAILURE);
       }
 
-      if (fileInfo.st_size == 0)
-      {
+      if (fileInfo.st_size == 0) {
         fprintf(stderr, "Error: File is empty, nothing to do\n");
         exit(EXIT_FAILURE);
       }
@@ -649,20 +622,21 @@ namespace openvkl
       printf("File size is %ji\n", (intmax_t)fileInfo.st_size);
 
       map = (char *)mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0);
-      if (map == MAP_FAILED)
-      {
+      if (map == MAP_FAILED) {
         close(fd);
         perror("Error mmapping the file");
         exit(EXIT_FAILURE);
       }
 
       assert(requested_size <= fileInfo.st_size);
-      ret.map_size = requested_size == 0 ? fileInfo.st_size : requested_size;
+      ret.map_size  = requested_size == 0 ? fileInfo.st_size : requested_size;
       ret.file_size = fileInfo.st_size;
       return ret;
     }
 
-    inline void filemap_write(FileMap &file, const void *data, const size_t bytes)
+    inline void filemap_write(FileMap &file,
+                              const void *data,
+                              const size_t bytes)
     {
       assert(file.type == FileMap::BINARY_WRITE);
       assert(bytes <= file.map_size);
@@ -671,8 +645,7 @@ namespace openvkl
 
       // Write data to in-core memory
       const char *text = (const char *)data;
-      for (size_t i = 0; i < bytes; i++)
-      {
+      for (size_t i = 0; i < bytes; i++) {
         file.map[file.p + i] = text[i];
       }
 
@@ -687,8 +660,7 @@ namespace openvkl
       printf("Read %zu bytes\n", bytes);
 
       char *text = (char *)data;
-      for (size_t i = 0; i < bytes; i++)
-      {
+      for (size_t i = 0; i < bytes; i++) {
         text[i] = file.map[file.p + i];
       }
 
@@ -698,17 +670,14 @@ namespace openvkl
     inline void filemap_close(FileMap &file)
     {
       // Flush data now to disk
-      if (file.type == FileMap::BINARY_WRITE)
-      {
-        if (msync(file.map, file.map_size, MS_SYNC) == -1)
-        {
+      if (file.type == FileMap::BINARY_WRITE) {
+        if (msync(file.map, file.map_size, MS_SYNC) == -1) {
           throw std::runtime_error("Could not sync the file to disk");
         }
       }
 
       // Don't forget to free the mmapped memory
-      if (munmap(file.map, file.map_size) == -1)
-      {
+      if (munmap(file.map, file.map_size) == -1) {
         close(file.fd);
         throw std::runtime_error("Error un-mmapping the file");
       }
@@ -717,6 +686,6 @@ namespace openvkl
       close(file.fd);
     }
 
-  } // namespace ispc_driver
-} // namespace openvkl
-#endif // defined(__cplusplus)
+  }  // namespace ispc_driver
+}  // namespace openvkl
+#endif  // defined(__cplusplus)

@@ -6,7 +6,7 @@
 #include <deque>
 
 #define HTG_STANDALONE
-#include "HtgNode.h"
+#include "/home/qadwu/Work/intel/openvkl/repo/openvkl/drivers/ispc/volume/htg/HtgNode.h"
 
 #include "openvdb/openvdb.h"
 
@@ -125,7 +125,8 @@ int main(int argc, char *argv[])
     // filter voxels
     voxels.filter();
 
-    openvkl::ispc_driver::HtgBuilder<float> builder(actualBounds, voxels, voxels.size());
+    openvkl::ispc_driver::HtgBuilder<float>
+        builder(actualBounds, voxels, voxels.size());
     builder.build();
     builder.print();
 
