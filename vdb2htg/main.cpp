@@ -1,20 +1,33 @@
+// Copyright 2019-2020 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
+#include <fstream>
 #include <iostream>
+#include <deque>
+
+#define HTG_STANDALONE
+#include "HtgNode.h"
+
 #include "openvdb/openvdb.h"
+
+// #include "cereal/types/unordered_map.hpp"
+// #include "cereal/types/memory.hpp"
+// #include "cereal/archives/binary.hpp"
 
 int main(int argc, char *argv[])
 {
-
-    std::cout << "hello" << std::endl;
-
     openvdb::initialize();
     openvdb::logging::initialize(argc, argv);
 
-    // Create a VDB file object.
-    //std::string name = "E:\\vdb\\v224\\sphere_points.vdb-1.0.0\\sphere_points.vdb";
     std::string name = "/home/qadwu/Data/openvdb/bunny_cloud.vdb";
+    // std::string name = "/home/qadwu/Data/openvdb/wdas_cloud/wdas_cloud_sixteenth.vdb";
+
+    // Create a VDB file object.
     openvdb::io::File file(name);
+
     // Open the file.  This reads the file header, but not any grids.
     file.open();
+
     // Loop over all grids in the file and retrieve a shared pointer
     // to the one named "LevelSetSphere".  (This can also be done
     // more simply by calling file.readGrid("LevelSetSphere").)
@@ -59,26 +72,98 @@ int main(int argc, char *argv[])
 
     // Visit and update all of the grid's active values, which correspond to
     // voxels on the narrow band.
-    // for (openvdb::FloatGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter)
-    // {
-    //     float dist = iter.getValue();
-    //     if (iter.isVoxelValue())
-    //     {
-    //         printf("[value] %f ", dist);
-    //         printf("VOXEL ");
-    //         // indices in the index space
-    //         std::cout << iter.getCoord() << std::endl;
-    //     }
-    //     else
-    //     {
-    //         printf("[value] %f ", dist);
-    //         printf("TILE ");
-    //         // bounding boxes in the index space
-    //         openvdb::CoordBBox bbox;
-    //         iter.getBoundingBox(bbox);
-    //         std::cout << bbox << std::endl;
-    //     }
-    // }
+    box3f actualBounds;
+    actualBounds.lower.x = g_bbox.min().x();
+    actualBounds.lower.y = g_bbox.min().y();
+    actualBounds.lower.z = g_bbox.min().z();
+    actualBounds.upper.x = g_bbox.max().x();
+    actualBounds.upper.y = g_bbox.max().y();
+    actualBounds.upper.z = g_bbox.max().z();
+
+    auto numValues = grid->activeVoxelCount();
+
+    openvkl::ispc_driver::HtgVoxels voxels(numValues, sizeof(float));
+
+    size_t index = 0;
+    for (openvdb::FloatGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter)
+    {
+        float f = iter.getValue();
+
+        vec3f coord;
+        float width;
+        range1f range;
+
+        range.lower = f;
+        range.upper = f;
+
+        if (iter.isVoxelValue())
+        {
+            // indices in the index space
+            auto _coord = iter.getCoord();
+            coord.x = _coord.x();
+            coord.y = _coord.y();
+            coord.z = _coord.z();
+            width = 1.f;
+        }
+        else
+        {
+            // bounding boxes in the index space
+            openvdb::CoordBBox bbox;
+            iter.getBoundingBox(bbox);
+            // OpenVDB tile should be cubic according to its data structure?
+            assert(bbox.dim().x() == bbox.dim().y());
+            assert(bbox.dim().x() == bbox.dim().z());
+            coord.x = bbox.min().x();
+            coord.y = bbox.min().y();
+            coord.z = bbox.min().z();
+            width = bbox.dim().x();
+        }
+
+        voxels.setVoxel<float>(index++, coord, width, f, range);
+    }
+
+    // filter voxels
+    voxels.filter();
+
+    openvkl::ispc_driver::HtgBuilder<float> builder(actualBounds, voxels, voxels.size());
+    builder.build();
+    builder.print();
+
+    using namespace openvkl::ispc_driver;
+
+    const size_t numOfNodes = builder.data.size();
+    const size_t dataSize = sizeof(HtgNode) * numOfNodes + 2 * sizeof(box3f) + sizeof(size_t);
+
+    auto mapper = filemap_write_create("bunny_density.stm", dataSize);
+    filemap_write(mapper, &builder.actualBounds, sizeof(builder.actualBounds));
+    filemap_write(mapper, &builder.extendBounds, sizeof(builder.extendBounds));
+    filemap_write(mapper, &numOfNodes, sizeof(numOfNodes));
+    filemap_write(mapper, builder.data.data(), sizeof(HtgNode) * builder.data.size());
+    filemap_close(mapper);
+
+    auto reader = filemap_read_create("bunny_density.stm", dataSize);
+    box3f _actualBounds, _extendBounds;
+    size_t _numOfNodes;
+    filemap_read(reader, &_actualBounds, sizeof(_actualBounds));
+    filemap_read(reader, &_extendBounds, sizeof(_extendBounds));
+    filemap_read(reader, &_numOfNodes, sizeof(_numOfNodes));
+    filemap_close(reader);
+
+    assert(_actualBounds.lower.x == builder.actualBounds.lower.x);
+    assert(_actualBounds.lower.y == builder.actualBounds.lower.y);
+    assert(_actualBounds.lower.z == builder.actualBounds.lower.z);
+    assert(_actualBounds.upper.x == builder.actualBounds.upper.x);
+    assert(_actualBounds.upper.y == builder.actualBounds.upper.y);
+    assert(_actualBounds.upper.z == builder.actualBounds.upper.z);
+
+    assert(_extendBounds.lower.x == builder.extendBounds.lower.x);
+    assert(_extendBounds.lower.y == builder.extendBounds.lower.y);
+    assert(_extendBounds.lower.z == builder.extendBounds.lower.z);
+    assert(_extendBounds.upper.x == builder.extendBounds.upper.x);
+    assert(_extendBounds.upper.y == builder.extendBounds.upper.y);
+    assert(_extendBounds.upper.z == builder.extendBounds.upper.z);
+
+    assert(_numOfNodes == numOfNodes);
 
     return 0;
 }

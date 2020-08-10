@@ -66,11 +66,17 @@ endif()
 
 message(STATUS "OPENVDB_BINARIES_DEPENDENT_LIBS "${OPENVDB_BINARIES_DEPENDENT_LIBS})
 
-add_executable(vdb2htg  main.cpp)
+include_directories(${CMAKE_CURRENT_LIST_DIR})
+
+add_executable(vdb2htg main.cpp
+  rkcommon/common.cpp)
+
 target_link_libraries(vdb2htg ${OPENVDB_BINARIES_DEPENDENT_LIBS})
+
 if(OPENVDB_ENABLE_RPATH)
   set_target_properties(vdb2htg
     PROPERTIES INSTALL_RPATH "${RPATHS}"
   )
 endif()
+
 install(TARGETS vdb2htg RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})

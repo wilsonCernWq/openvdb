@@ -3,7 +3,7 @@
         // "CMAKE_TOOLCHAIN_FILE": "D:/repos/vcpkg/scripts/buildsystems/vcpkg.cmake",
         // "VCPKG_TARGET_TRIPLET": "x64-windows",
         // "TBB_ROOT": "D:/softwares/tbb-2020.2-win/tbb"
-        "Blosc_ROOT": "/home/qadwu/Work/others/c-blosc/install"
+        "Blosc_ROOT": "/home/qadwu/Work/others/c-blosc/install",
     },
     "[cpp]": {
         "editor.defaultFormatter": "ms-vscode.cpptools"
@@ -71,6 +71,8 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "variant": "cpp",
-        "bit": "cpp"
+        "bit": "cpp",
+        "future": "cpp",
+        "*.cuh": "cpp"
     }
 }
