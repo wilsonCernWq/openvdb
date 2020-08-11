@@ -21,8 +21,8 @@ int main(int argc, char *argv[])
 
     // std::string data_name = "smoke";
     // std::string data_name = "smoke2";
-    // std::string data_name = "bunny_cloud";
-    std::string data_name = "explosion";
+    std::string data_name = "bunny_cloud";
+    // std::string data_name = "explosion";
     std::string name = "/home/qadwu/Data/openvdb/" + data_name + ".vdb";
 
     // Create a VDB file object.
@@ -32,8 +32,7 @@ int main(int argc, char *argv[])
     file.open();
 
     // Loop over all grids in the file and retrieve a shared pointer
-    // to the one named "LevelSetSphere".  (This can also be done
-    // more simply by calling file.readGrid("LevelSetSphere").)
+    // to the one named "density".
     openvdb::GridBase::Ptr baseGrid;
     for (openvdb::io::File::NameIterator nameIter = file.beginName();
          nameIter != file.endName(); ++nameIter)
@@ -76,12 +75,12 @@ int main(int argc, char *argv[])
     // Visit and update all of the grid's active values, which correspond to
     // voxels on the narrow band.
     box3f actualBounds;
-    actualBounds.lower.x = 0.f; // g_bbox.min().x() - 0.5f;
-    actualBounds.lower.y = 0.f; // g_bbox.min().y() - 0.5f;
-    actualBounds.lower.z = 0.f; // g_bbox.min().z() - 0.5f;
-    actualBounds.upper.x = g_dims.x() + 1.f; // g_bbox.max().x() + 0.5f;
-    actualBounds.upper.y = g_dims.y() + 1.f; // g_bbox.max().y() + 0.5f;
-    actualBounds.upper.z = g_dims.z() + 1.f; // g_bbox.max().z() + 0.5f;
+    actualBounds.lower.x = 0.f;
+    actualBounds.lower.y = 0.f;
+    actualBounds.lower.z = 0.f;
+    actualBounds.upper.x = g_dims.x() + 1.f;
+    actualBounds.upper.y = g_dims.y() + 1.f;
+    actualBounds.upper.z = g_dims.z() + 1.f;
 
     auto numValues = grid->activeVoxelCount();
 
@@ -138,45 +137,26 @@ int main(int argc, char *argv[])
     voxels.filter();
 
     openvkl::ispc_driver::HtgBuilder<float>
-        builder(actualBounds, voxels, voxels.size());
+        builder(actualBounds.upper, voxels, voxels.size());
     builder.build();
     builder.print();
 
     using namespace openvkl::ispc_driver;
 
-    const size_t numOfNodes = builder.data.size();
-    const size_t dataSize = sizeof(HtgNode) * numOfNodes + 2 * sizeof(box3f) + sizeof(size_t);
+    const range1f range = getValueRange(builder.data[0], 0);
+    const uint64_t numOfNodes = builder.data.size();
+    const uint64_t dataSize = sizeof(HtgNode) * numOfNodes + 2 * sizeof(box3f) + sizeof(size_t);
 
     auto mapper = filemap_write_create(data_name + ".stm", dataSize);
-    filemap_write(mapper, &builder.actualBounds, sizeof(builder.actualBounds));
-    filemap_write(mapper, &builder.extendBounds, sizeof(builder.extendBounds));
-    filemap_write(mapper, &numOfNodes, sizeof(numOfNodes));
+
+    // file format
+    filemap_write(mapper, &numOfNodes, sizeof(uint64_t));
+    filemap_write(mapper, &builder.actualBounds, sizeof(vec3f));
+    filemap_write(mapper, &builder.extendBounds, sizeof(float));
+    filemap_write(mapper, &range.lower, sizeof(float));
+    filemap_write(mapper, &range.upper, sizeof(float));
     filemap_write(mapper, builder.data.data(), sizeof(HtgNode) * builder.data.size());
     filemap_close(mapper);
-
-    auto reader = filemap_read_create(data_name + ".stm", dataSize);
-    box3f _actualBounds, _extendBounds;
-    size_t _numOfNodes;
-    filemap_read(reader, &_actualBounds, sizeof(_actualBounds));
-    filemap_read(reader, &_extendBounds, sizeof(_extendBounds));
-    filemap_read(reader, &_numOfNodes, sizeof(_numOfNodes));
-    filemap_close(reader);
-
-    assert(_actualBounds.lower.x == builder.actualBounds.lower.x);
-    assert(_actualBounds.lower.y == builder.actualBounds.lower.y);
-    assert(_actualBounds.lower.z == builder.actualBounds.lower.z);
-    assert(_actualBounds.upper.x == builder.actualBounds.upper.x);
-    assert(_actualBounds.upper.y == builder.actualBounds.upper.y);
-    assert(_actualBounds.upper.z == builder.actualBounds.upper.z);
-
-    assert(_extendBounds.lower.x == builder.extendBounds.lower.x);
-    assert(_extendBounds.lower.y == builder.extendBounds.lower.y);
-    assert(_extendBounds.lower.z == builder.extendBounds.lower.z);
-    assert(_extendBounds.upper.x == builder.extendBounds.upper.x);
-    assert(_extendBounds.upper.y == builder.extendBounds.upper.y);
-    assert(_extendBounds.upper.z == builder.extendBounds.upper.z);
-
-    assert(_numOfNodes == numOfNodes);
 
     return 0;
 }
