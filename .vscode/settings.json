@@ -73,6 +73,10 @@
         "variant": "cpp",
         "bit": "cpp",
         "future": "cpp",
-        "*.cuh": "cpp"
+        "*.cuh": "cpp",
+        "forward_list": "cpp",
+        "unordered_set": "cpp",
+        "regex": "cpp",
+        "valarray": "cpp"
     }
 }

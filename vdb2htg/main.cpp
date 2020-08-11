@@ -19,8 +19,11 @@ int main(int argc, char *argv[])
     openvdb::initialize();
     openvdb::logging::initialize(argc, argv);
 
-    std::string name = "/home/qadwu/Data/openvdb/bunny_cloud.vdb";
-    // std::string name = "/home/qadwu/Data/openvdb/wdas_cloud/wdas_cloud_sixteenth.vdb";
+    // std::string data_name = "smoke";
+    // std::string data_name = "smoke2";
+    // std::string data_name = "bunny_cloud";
+    std::string data_name = "explosion";
+    std::string name = "/home/qadwu/Data/openvdb/" + data_name + ".vdb";
 
     // Create a VDB file object.
     openvdb::io::File file(name);
@@ -73,12 +76,12 @@ int main(int argc, char *argv[])
     // Visit and update all of the grid's active values, which correspond to
     // voxels on the narrow band.
     box3f actualBounds;
-    actualBounds.lower.x = g_bbox.min().x();
-    actualBounds.lower.y = g_bbox.min().y();
-    actualBounds.lower.z = g_bbox.min().z();
-    actualBounds.upper.x = g_bbox.max().x();
-    actualBounds.upper.y = g_bbox.max().y();
-    actualBounds.upper.z = g_bbox.max().z();
+    actualBounds.lower.x = 0.f; // g_bbox.min().x() - 0.5f;
+    actualBounds.lower.y = 0.f; // g_bbox.min().y() - 0.5f;
+    actualBounds.lower.z = 0.f; // g_bbox.min().z() - 0.5f;
+    actualBounds.upper.x = g_dims.x() + 1.f; // g_bbox.max().x() + 0.5f;
+    actualBounds.upper.y = g_dims.y() + 1.f; // g_bbox.max().y() + 0.5f;
+    actualBounds.upper.z = g_dims.z() + 1.f; // g_bbox.max().z() + 0.5f;
 
     auto numValues = grid->activeVoxelCount();
 
@@ -100,26 +103,35 @@ int main(int argc, char *argv[])
         {
             // indices in the index space
             auto _coord = iter.getCoord();
-            coord.x = _coord.x();
-            coord.y = _coord.y();
-            coord.z = _coord.z();
+            coord.x = _coord.x() - g_bbox.min().x();
+            coord.y = _coord.y() - g_bbox.min().y();
+            coord.z = _coord.z() - g_bbox.min().z();
             width = 1.f;
+            voxels.setVoxel<float>(index++, coord, width, f, range);
         }
         else
         {
             // bounding boxes in the index space
             openvdb::CoordBBox bbox;
             iter.getBoundingBox(bbox);
+            std::cout << bbox << std::endl;
             // OpenVDB tile should be cubic according to its data structure?
-            assert(bbox.dim().x() == bbox.dim().y());
-            assert(bbox.dim().x() == bbox.dim().z());
-            coord.x = bbox.min().x();
-            coord.y = bbox.min().y();
-            coord.z = bbox.min().z();
-            width = bbox.dim().x();
+            for (size_t z = 0; z < bbox.dim().z(); ++z)
+            {
+                for (size_t y = 0; y < bbox.dim().y(); ++y)
+                {
+                    for (size_t x = 0; x < bbox.dim().x(); ++x)
+                    {
+                        coord.x = bbox.min().x() + (float)x - g_bbox.min().x();
+                        coord.y = bbox.min().y() + (float)y - g_bbox.min().y();
+                        coord.z = bbox.min().z() + (float)z - g_bbox.min().z();
+                        width = 1.f;
+                        voxels.setVoxel<float>(index++, coord, width, f, range);
+                    }
+                }
+            }
+            voxels.setVoxel<float>(index++, coord, -1.f, f, range);
         }
-
-        voxels.setVoxel<float>(index++, coord, width, f, range);
     }
 
     // filter voxels
@@ -135,14 +147,14 @@ int main(int argc, char *argv[])
     const size_t numOfNodes = builder.data.size();
     const size_t dataSize = sizeof(HtgNode) * numOfNodes + 2 * sizeof(box3f) + sizeof(size_t);
 
-    auto mapper = filemap_write_create("bunny_density.stm", dataSize);
+    auto mapper = filemap_write_create(data_name + ".stm", dataSize);
     filemap_write(mapper, &builder.actualBounds, sizeof(builder.actualBounds));
     filemap_write(mapper, &builder.extendBounds, sizeof(builder.extendBounds));
     filemap_write(mapper, &numOfNodes, sizeof(numOfNodes));
     filemap_write(mapper, builder.data.data(), sizeof(HtgNode) * builder.data.size());
     filemap_close(mapper);
 
-    auto reader = filemap_read_create("bunny_density.stm", dataSize);
+    auto reader = filemap_read_create(data_name + ".stm", dataSize);
     box3f _actualBounds, _extendBounds;
     size_t _numOfNodes;
     filemap_read(reader, &_actualBounds, sizeof(_actualBounds));
