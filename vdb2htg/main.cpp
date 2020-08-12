@@ -27,15 +27,15 @@ struct FileMap
         BINARY_WRITE,
         BINARY_READ
     } type;
-    char *map        = (char *)MAP_FAILED;
-    int fd           = -1;
-    uint64_t p         = 0;
-    uint64_t map_size  = 0;
+    char *map = (char *)MAP_FAILED;
+    int fd = -1;
+    uint64_t p = 0;
+    uint64_t map_size = 0;
     uint64_t file_size = 0;
 };
 
 inline FileMap filemap_write_create(const std::string &filename,
-    uint64_t requested_size)
+                                    uint64_t requested_size)
 {
     /* Open a file for writing.
      *  - Creating the file if it doesn't exist.
@@ -47,19 +47,21 @@ inline FileMap filemap_write_create(const std::string &filename,
     FileMap ret;
     ret.type = FileMap::BINARY_WRITE;
 
-    int &fd    = ret.fd;
+    int &fd = ret.fd;
     char *&map = ret.map;
 
     fd = open(filename.c_str(), O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
 
-    if (fd == -1) {
+    if (fd == -1)
+    {
         perror("Error opening file for writing");
         throw std::runtime_error("Termination caused by I/O errors");
     }
 
     // Stretch the file size to the size of the (mmapped) array of char
 
-    if (lseek(fd, requested_size - 1, SEEK_SET) == -1) {
+    if (lseek(fd, requested_size - 1, SEEK_SET) == -1)
+    {
         close(fd);
         perror("Error calling lseek() to 'stretch' the file");
         throw std::runtime_error("Termination caused by I/O errors");
@@ -76,7 +78,8 @@ inline FileMap filemap_write_create(const std::string &filename,
      *    will be written at the last byte of the file.
      */
 
-    if (write(fd, "", 1) == -1) {
+    if (write(fd, "", 1) == -1)
+    {
         close(fd);
         perror("Error writing last byte of the file");
         throw std::runtime_error("Termination caused by I/O errors");
@@ -85,62 +88,67 @@ inline FileMap filemap_write_create(const std::string &filename,
     // Now the file is ready to be mmapped.
     map = (char *)mmap(
         0, requested_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (map == MAP_FAILED) {
+    if (map == MAP_FAILED)
+    {
         close(fd);
         perror("Error mmapping the file");
         throw std::runtime_error("Termination caused by I/O errors");
     }
 
-    ret.map_size  = requested_size;
+    ret.map_size = requested_size;
     ret.file_size = requested_size;
     return ret;
 }
 
 inline FileMap filemap_read_create(const std::string &filename,
-    uint64_t requested_size = 0)
+                                   uint64_t requested_size = 0)
 {
     FileMap ret;
     ret.type = FileMap::BINARY_READ;
 
-    int &fd    = ret.fd;
+    int &fd = ret.fd;
     char *&map = ret.map;
 
     fd = open(filename.c_str(), O_RDONLY, (mode_t)0600);
 
-    if (fd == -1) {
+    if (fd == -1)
+    {
         perror("Error opening file for writing");
         throw std::runtime_error("Termination caused by I/O errors");
     }
 
-    struct stat fileInfo ={ 0 };
+    struct stat fileInfo = {0};
 
-    if (fstat(fd, &fileInfo) == -1) {
+    if (fstat(fd, &fileInfo) == -1)
+    {
         perror("Error getting the file size");
         throw std::runtime_error("Termination caused by I/O errors");
     }
 
-    if (fileInfo.st_size == 0) {
+    if (fileInfo.st_size == 0)
+    {
         throw std::runtime_error("Error: File is empty, nothing to do");
     }
 
     printf("File size is %ji\n", (intmax_t)fileInfo.st_size);
 
     map = (char *)mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (map == MAP_FAILED) {
+    if (map == MAP_FAILED)
+    {
         close(fd);
         perror("Error mmapping the file");
         throw std::runtime_error("Termination caused by I/O errors");
     }
 
     assert(requested_size <= fileInfo.st_size);
-    ret.map_size  = requested_size == 0 ? fileInfo.st_size : requested_size;
+    ret.map_size = requested_size == 0 ? fileInfo.st_size : requested_size;
     ret.file_size = fileInfo.st_size;
     return ret;
 }
 
 inline void filemap_write(FileMap &file,
-    const void *data,
-    const uint64_t bytes)
+                          const void *data,
+                          const uint64_t bytes)
 {
     assert(file.type == FileMap::BINARY_WRITE);
     assert(bytes <= file.map_size);
@@ -149,7 +157,8 @@ inline void filemap_write(FileMap &file,
 
     // Write data to in-core memory
     const char *text = (const char *)data;
-    for (uint64_t i = 0; i < bytes; i++) {
+    for (uint64_t i = 0; i < bytes; i++)
+    {
         file.map[file.p + i] = text[i];
     }
 
@@ -164,7 +173,8 @@ inline void filemap_read(FileMap &file, void *data, const uint64_t bytes)
     printf("Read %zu bytes\n", bytes);
 
     char *text = (char *)data;
-    for (uint64_t i = 0; i < bytes; i++) {
+    for (uint64_t i = 0; i < bytes; i++)
+    {
         text[i] = file.map[file.p + i];
     }
 
@@ -174,7 +184,8 @@ inline void filemap_read(FileMap &file, void *data, const uint64_t bytes)
 inline void filemap_close(FileMap &file)
 {
     // Don't forget to free the mmapped memory
-    if (munmap(file.map, file.map_size) == -1) {
+    if (munmap(file.map, file.map_size) == -1)
+    {
         close(file.fd);
         perror("Error un-mmapping the file");
         throw std::runtime_error("Termination caused by I/O errors");
@@ -187,10 +198,12 @@ inline void filemap_close(FileMap &file)
 // ----------------------------------------------------------------------------
 // Builder Implementation
 // ----------------------------------------------------------------------------
-struct vec3f {
+struct vec3f
+{
     float x, y, z;
 };
-struct range1f {
+struct range1f
+{
     float lower, upper;
 };
 
@@ -199,11 +212,18 @@ int main(int argc, char *argv[])
     openvdb::initialize();
     openvdb::logging::initialize(argc, argv);
 
-    std::string data_name = "smoke";
+    // std::string data_name = "smoke";
     // std::string data_name = "smoke2";
     // std::string data_name = "bunny_cloud";
     // std::string data_name = "explosion";
-    std::string name = "/home/qadwu/Data/openvdb/" + data_name + ".vdb";
+    // std::string name = "/home/qadwu/Data/openvdb/" + data_name + ".vdb";
+
+    // std::string data_name = "wdas_cloud_sixteenth";
+    // std::string data_name = "wdas_cloud_eighth";
+    // std::string data_name = "wdas_cloud_quarter";
+    // std::string data_name = "wdas_cloud_half";
+    std::string data_name = "wdas_cloud";
+    std::string name = "/home/qadwu/Data/openvdb/wdas_cloud/" + data_name + ".vdb";
 
     // Create a VDB file object.
     printf("working on %s\n", name.c_str());
@@ -216,7 +236,7 @@ int main(int argc, char *argv[])
     // to the one named "density".
     openvdb::GridBase::Ptr baseGrid;
     for (openvdb::io::File::NameIterator nameIter = file.beginName();
-        nameIter != file.endName(); ++nameIter)
+         nameIter != file.endName(); ++nameIter)
     {
         // Read in only the grid we are interested in.
         if (nameIter.gridName() == "density")
@@ -270,10 +290,10 @@ int main(int argc, char *argv[])
     filemap_write(mapper, &numValues, sizeof(uint64_t));
     filemap_write(mapper, &actualBounds, sizeof(vec3f));
 
-    vec3f* lowers = (vec3f*)&mapper.map[mapper.p];
-    float* widths = (float*)&mapper.map[mapper.p + numValues * 3 * sizeof(float)];
-    float* values = (float*)&mapper.map[mapper.p + numValues * 4 * sizeof(float)];
-    range1f* ranges = (range1f*)&mapper.map[mapper.p + numValues * 5 * sizeof(float)];
+    vec3f *lowers = (vec3f *)&mapper.map[mapper.p];
+    float *widths = (float *)&mapper.map[mapper.p + numValues * 3 * sizeof(float)];
+    float *values = (float *)&mapper.map[mapper.p + numValues * 4 * sizeof(float)];
+    range1f *ranges = (range1f *)&mapper.map[mapper.p + numValues * 5 * sizeof(float)];
 
     size_t index = 0;
     for (openvdb::FloatGrid::ValueOnIter iter = grid->beginValueOn(); iter; ++iter)
