@@ -199,9 +199,9 @@ int main(int argc, char *argv[])
     openvdb::initialize();
     openvdb::logging::initialize(argc, argv);
 
-    // std::string data_name = "smoke";
+    std::string data_name = "smoke";
     // std::string data_name = "smoke2";
-    std::string data_name = "bunny_cloud";
+    // std::string data_name = "bunny_cloud";
     // std::string data_name = "explosion";
     std::string name = "/home/qadwu/Data/openvdb/" + data_name + ".vdb";
 
@@ -226,7 +226,8 @@ int main(int argc, char *argv[])
         }
         else
         {
-            std::cout << "skipping grid " << nameIter.gridName() << std::endl;
+            openvdb::GridBase::Ptr _g = file.readGrid(nameIter.gridName());
+            printf("skipping grid %s (%s)\n", nameIter.gridName().c_str(), _g->type().c_str());
         }
     }
     file.close();
@@ -327,7 +328,7 @@ int main(int argc, char *argv[])
     }
 
     assert(index == numValues);
-    
+
     filemap_close(mapper);
 
     return 0;
