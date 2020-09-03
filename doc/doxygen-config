@@ -38,15 +38,15 @@ PROJECT_NAME           = "OpenVDB"
 # could be handy for archiving the generated documentation or if some version
 # control system is used.
 
-PROJECT_NUMBER         = 7.0.1
+PROJECT_NUMBER         = 7.1.1
 
-PREDEFINED             = OPENVDB_VERSION_NAME=v7_0
+PREDEFINED             = OPENVDB_VERSION_NAME=v7_1
 PREDEFINED            += OPENVDB_ABI_VERSION_NUMBER=7
 
 ALIASES               += ijk="(<i>i</i>,&nbsp;<i>j</i>,&nbsp;<i>k</i>)" \
                          xyz="(<i>x</i>,&nbsp;<i>y</i>,&nbsp;<i>z</i>)" \
                          const="<tt>const</tt>"
-ALIASES               += "vdbnamespace=openvdb::v7_0" \
+ALIASES               += "vdbnamespace=openvdb::v7_1" \
                          "hunamespace=houdini_utils" \
                          "hvdbnamespace=openvdb_houdini"
 # Use this command to create a link to an OpenVDB class, function, etc.
@@ -68,7 +68,6 @@ ALIASES               += hulink{2}="<B>\2</B>" \
                          hvdblink{2}="<B>\2</B>"
 
 PREDEFINED            += __declspec(x):= __attribute__(x):=
-PREDEFINED            += OPENVDB_STATIC_SPECIALIZATION=""
 PREDEFINED            += OPENVDB_USE_LOG4CPLUS=
 
 #EXPAND_AS_DEFINED = \
@@ -76,19 +75,18 @@ PREDEFINED            += OPENVDB_USE_LOG4CPLUS=
 #    OPENVDB_HOUDINI_API \
 #    OPENVDB_EXPORT \
 #    OPENVDB_IMPORT \
-#    OPENVDB_DEPRECATED \
-#    OPENVDB_STATIC_SPECIALIZATION
+#    OPENVDB_DEPRECATED
 
 IMAGE_PATH             = doc/img
 
-INPUT                  = openvdb \
-                         openvdb/io \
-                         openvdb/math \
-                         openvdb/points \
-                         openvdb/python/pyopenvdb.h \
-                         openvdb/tools \
-                         openvdb/tree \
-                         openvdb/util \
+INPUT                  = openvdb/openvdb \
+                         openvdb/openvdb/io \
+                         openvdb/openvdb/math \
+                         openvdb/openvdb/points \
+                         openvdb/openvdb/python/pyopenvdb.h \
+                         openvdb/openvdb/tools \
+                         openvdb/openvdb/tree \
+                         openvdb/openvdb/util \
                          doc/build.txt \
                          doc/changes.txt \
                          doc/codingstyle.txt \
