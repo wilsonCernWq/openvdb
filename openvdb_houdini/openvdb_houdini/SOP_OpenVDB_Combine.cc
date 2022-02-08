@@ -964,7 +964,7 @@ struct SOP_OpenVDB_Combine::CombineOp
     UT_String aGridName, bGridName;
     hvdb::GridCPtr aBaseGrid, bBaseGrid;
     hvdb::GridPtr outGrid;
-    hvdb::Interrupter interrupt;
+    hvdb::HoudiniInterrupter interrupt;
 
     CombineOp(): self(nullptr) {}
 
@@ -1013,7 +1013,7 @@ struct SOP_OpenVDB_Combine::CombineOp
 
             try {
                 dest = openvdb::tools::doLevelSetRebuild(src, /*iso=*/ZERO,
-                    /*exWidth=*/halfWidth, /*inWidth=*/halfWidth, &refXform, &interrupt);
+                    /*exWidth=*/halfWidth, /*inWidth=*/halfWidth, &refXform, &interrupt.interrupter());
             } catch (openvdb::TypeError&) {
                 self->addWarning(SOP_MESSAGE, ("skipped rebuild of level set grid "
                     + src.getName() + " of type " + src.type()).c_str());
@@ -1028,9 +1028,9 @@ struct SOP_OpenVDB_Combine::CombineOp
             dest->setTransform(refXform.copy());
             using namespace openvdb;
             switch (order) {
-            case 0: tools::resampleToMatch<tools::PointSampler>(src, *dest, interrupt); break;
-            case 1: tools::resampleToMatch<tools::BoxSampler>(src, *dest, interrupt); break;
-            case 2: tools::resampleToMatch<tools::QuadraticSampler>(src, *dest, interrupt); break;
+            case 0: tools::resampleToMatch<tools::PointSampler>(src, *dest, interrupt.interrupter()); break;
+            case 1: tools::resampleToMatch<tools::BoxSampler>(src, *dest, interrupt.interrupter()); break;
+            case 2: tools::resampleToMatch<tools::QuadraticSampler>(src, *dest, interrupt.interrupter()); break;
             }
         }
         return dest;
@@ -1158,6 +1158,22 @@ struct SOP_OpenVDB_Combine::CombineOp
         }
     }
 
+    template <typename GridT>
+    void doUnion(GridT &result, GridT &temp)
+    {
+        openvdb::tools::csgUnion(result, temp);
+    }
+    template <typename GridT>
+    void doIntersection(GridT &result, GridT &temp)
+    {
+        openvdb::tools::csgIntersection(result, temp);
+    }
+    template <typename GridT>
+    void doDifference(GridT &result, GridT &temp)
+    {
+        openvdb::tools::csgDifference(result, temp);
+    }
+
     // Combine two grids of the same type.
     template<typename GridT>
     void combineSameType()
@@ -1265,19 +1281,19 @@ struct SOP_OpenVDB_Combine::CombineOp
             case OP_UNION:
                 MulAdd<GridT>(aMult).process(*aGrid, resultGrid);
                 MulAdd<GridT>(bMult).process(*bGrid, tempGrid);
-                openvdb::tools::csgUnion(*resultGrid, *tempGrid);
+                doUnion(*resultGrid, *tempGrid);
                 break;
 
             case OP_INTERSECTION:
                 MulAdd<GridT>(aMult).process(*aGrid, resultGrid);
                 MulAdd<GridT>(bMult).process(*bGrid, tempGrid);
-                openvdb::tools::csgIntersection(*resultGrid, *tempGrid);
+                doIntersection(*resultGrid, *tempGrid);
                 break;
 
             case OP_DIFFERENCE:
                 MulAdd<GridT>(aMult).process(*aGrid, resultGrid);
                 MulAdd<GridT>(bMult).process(*bGrid, tempGrid);
-                openvdb::tools::csgDifference(*resultGrid, *tempGrid);
+                doDifference(*resultGrid, *tempGrid);
                 break;
 
             case OP_REPLACE:
@@ -1428,6 +1444,19 @@ struct SOP_OpenVDB_Combine::CombineOp
     }
 }; // struct CombineOp
 
+template <>
+void SOP_OpenVDB_Combine::CombineOp::doUnion(openvdb::BoolGrid &result, openvdb::BoolGrid &temp)
+{
+}
+template <>
+void SOP_OpenVDB_Combine::CombineOp::doIntersection(openvdb::BoolGrid &result, openvdb::BoolGrid &temp)
+{
+}
+template <>
+void SOP_OpenVDB_Combine::CombineOp::doDifference(openvdb::BoolGrid &result, openvdb::BoolGrid &temp)
+{
+}
+
 
 template<typename AGridT>
 template<typename BGridT>
@@ -1492,12 +1521,10 @@ SOP_OpenVDB_Combine::Cache::combineGrids(
     compOp.bBaseGrid = bGrid;
     compOp.aGridName = aGridName;
     compOp.bGridName = bGridName;
-    compOp.interrupt = hvdb::Interrupter();
+    compOp.interrupt = hvdb::HoudiniInterrupter();
 
     int success = false;
-    if (needA || UTvdbGetGridType(*aGrid) == UTvdbGetGridType(*bGrid)) {
-        success = aGrid->apply<hvdb::VolumeGridTypes>(compOp);
-    }
+    success = (needA ? aGrid : bGrid)->apply<hvdb::VolumeGridTypes>(compOp);
     if (!success || !compOp.outGrid) {
         std::ostringstream ostr;
         if (aGrid->type() == bGrid->type()) {

@@ -9,22 +9,14 @@
 #include <boost/python.hpp>
 #include <boost/python/stl_iterator.hpp>
 #include <boost/python/exception_translator.hpp>
-#ifndef DWA_BOOST_VERSION
-#include <boost/version.hpp>
-#define DWA_BOOST_VERSION (10 * BOOST_VERSION)
-#endif
-#if defined PY_OPENVDB_USE_NUMPY && DWA_BOOST_VERSION < 1065000
-  #define PY_ARRAY_UNIQUE_SYMBOL PY_OPENVDB_ARRAY_API
-  #include <numpyconfig.h>
-  #ifdef NPY_1_7_API_VERSION
-    #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-  #endif
-  #include <arrayobject.h> // for import_array()
-#endif
 #include "openvdb/openvdb.h"
 #include "pyopenvdb.h"
 #include "pyGrid.h"
 #include "pyutil.h"
+
+#ifdef PY_OPENVDB_USE_AX
+#include <openvdb_ax/ax.h>
+#endif
 
 namespace py = boost::python;
 
@@ -531,9 +523,8 @@ template<typename T> void translateException(const T&) {}
 
 /// Define an overloaded function that translate all OpenVDB exceptions into
 /// their Python equivalents.
-/// @todo IllegalValueException and LookupError are redundant and should someday be removed.
+/// @todo LookupError is redundant and should someday be removed.
 PYOPENVDB_CATCH(openvdb::ArithmeticError,       PyExc_ArithmeticError)
-PYOPENVDB_CATCH(openvdb::IllegalValueException, PyExc_ValueError)
 PYOPENVDB_CATCH(openvdb::IndexError,            PyExc_IndexError)
 PYOPENVDB_CATCH(openvdb::IoError,               PyExc_IOError)
 PYOPENVDB_CATCH(openvdb::KeyError,              PyExc_KeyError)
@@ -556,6 +547,10 @@ py::dict readFileMetadata(const std::string&);
 py::object readGridMetadataFromFile(const std::string&, const std::string&);
 py::list readAllGridMetadataFromFile(const std::string&);
 void writeToFile(const std::string&, py::object, py::object);
+
+#ifdef PY_OPENVDB_USE_AX
+void axrun(const std::string&, py::object);
+#endif
 
 
 py::object
@@ -665,6 +660,27 @@ writeToFile(const std::string& filename, py::object gridOrSeqObj, py::object dic
     vdbFile.close();
 }
 
+#ifdef PY_OPENVDB_USE_AX
+void axrun(const std::string& code, py::object gridOrSeqObj)
+{
+    GridPtrVec gridVec;
+    try {
+        GridBase::Ptr base = pyopenvdb::getGridFromPyObject(gridOrSeqObj);
+        gridVec.push_back(base);
+    } catch (openvdb::TypeError&) {
+        for (py::stl_input_iterator<py::object> it(gridOrSeqObj), end; it != end; ++it) {
+            if (GridBase::Ptr base = pyGrid::getGridBaseFromGrid(*it)) {
+                gridVec.push_back(base);
+            }
+        }
+    }
+
+    try { openvdb::ax::run(code.c_str(), gridVec); }
+    catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+    }
+}
+#endif
 
 ////////////////////////////////////////
 
@@ -834,7 +850,9 @@ BOOST_PYTHON_MODULE(PY_OPENVDB_MODULE_NAME)
 
     // Initialize OpenVDB.
     initialize();
-
+#ifdef PY_OPENVDB_USE_AX
+    openvdb::ax::initialize();
+#endif
     _openvdbmodule::CoordConverter::registerConverter();
 
     _openvdbmodule::VecConverter<Vec2i>::registerConverter();
@@ -863,7 +881,6 @@ BOOST_PYTHON_MODULE(PY_OPENVDB_MODULE_NAME)
     py::register_exception_translator<_classname>(&_openvdbmodule::translateException<_classname>)
 
     PYOPENVDB_TRANSLATE_EXCEPTION(ArithmeticError);
-    PYOPENVDB_TRANSLATE_EXCEPTION(IllegalValueException);
     PYOPENVDB_TRANSLATE_EXCEPTION(IndexError);
     PYOPENVDB_TRANSLATE_EXCEPTION(IoError);
     PYOPENVDB_TRANSLATE_EXCEPTION(KeyError);
@@ -891,6 +908,14 @@ BOOST_PYTHON_MODULE(PY_OPENVDB_MODULE_NAME)
         (py::arg("filename"), py::arg("gridname")),
         "read(filename, gridname) -> Grid\n\n"
         "Read a single grid from a .vdb file.");
+
+#ifdef PY_OPENVDB_USE_AX
+    py::def("ax",
+        &_openvdbmodule::axrun,
+        (py::arg("code"), py::arg("grids")),
+        "ax(code, grids) -> Grid\n\n"
+        "Run AX code on some VDB grids.");
+#endif
 
     py::def("readAll",
         &_openvdbmodule::readAllFromFile,

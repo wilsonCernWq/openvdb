@@ -43,8 +43,16 @@ See @subpage points "OpenVDB Points" to store point data using @b OpenVDB.
 See @subpage python "Using OpenVDB in Python" to get started with the
 @b OpenVDB Python module.
 
+@if OPENVDB_AX
+See @subpage openvdbax "OpenVDB AX" for the AX documentation.
+@endif
+
 @if OPENVDB_HOUDINI
 See the @subpage houdini "Houdini Cookbook" for help on implementing Houdini nodes.
+@endif
+
+@if NANOVDB
+See @subpage NanoVDB_MainPage "NanoVDB" for the NanoVDB documentation.
 @endif
 
 Contributors, please familiarize yourselves with our

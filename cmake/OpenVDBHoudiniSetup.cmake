@@ -75,12 +75,10 @@ may be provided to tell this module where to look.
 # Find the Houdini installation and use Houdini's CMake to initialize
 # the Houdini lib
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 
-# Monitoring <PackageName>_ROOT variables
-if(POLICY CMP0074)
-  cmake_policy(SET CMP0074 NEW)
-endif()
+# Include utility functions for version information
+include(${CMAKE_CURRENT_LIST_DIR}/OpenVDBUtils.cmake)
 
 set(_FIND_HOUDINI_ADDITIONAL_OPTIONS "")
 if(DISABLE_CMAKE_SEARCH_PATHS)
@@ -141,11 +139,15 @@ find_package(Houdini
 # Note that passing MINIMUM_HOUDINI_VERSION into find_package(Houdini) doesn't work
 if(NOT Houdini_FOUND)
   message(FATAL_ERROR "Unable to locate Houdini Installation.")
-elseif(Houdini_VERSION VERSION_LESS MINIMUM_HOUDINI_VERSION)
-  message(FATAL_ERROR "Unsupported Houdini Version ${Houdini_VERSION}. Minimum "
-    "supported is ${MINIMUM_HOUDINI_VERSION}."
-  )
+elseif(MINIMUM_HOUDINI_VERSION)
+  if(Houdini_VERSION VERSION_LESS MINIMUM_HOUDINI_VERSION)
+    message(FATAL_ERROR "Unsupported Houdini Version ${Houdini_VERSION}. Minimum "
+      "supported is ${MINIMUM_HOUDINI_VERSION}."
+    )
+  endif()
 endif()
+
+set(Houdini_VERSION_MAJOR_MINOR "${Houdini_VERSION_MAJOR}.${Houdini_VERSION_MINOR}")
 
 find_package(PackageHandleStandardArgs)
 find_package_handle_standard_args(Houdini
@@ -208,10 +210,17 @@ elseif(UNIX)
   )
 elseif(WIN32)
   #libRAY is already included by houdini for windows builds
-  list(APPEND _HOUDINI_EXTRA_LIBRARIES
-    ${HOUDINI_DSOLIB_DIR}/hboost_regex-mt.lib
-    ${HOUDINI_DSOLIB_DIR}/hboost_thread-mt.lib
-  )
+  if(Houdini_VERSION VERSION_LESS 18.5)
+    list(APPEND _HOUDINI_EXTRA_LIBRARIES
+      ${HOUDINI_DSOLIB_DIR}/hboost_regex-mt.lib
+      ${HOUDINI_DSOLIB_DIR}/hboost_thread-mt.lib
+    )
+  else()
+    list(APPEND _HOUDINI_EXTRA_LIBRARIES
+      ${HOUDINI_DSOLIB_DIR}/hboost_regex-mt-x64.lib
+      ${HOUDINI_DSOLIB_DIR}/hboost_thread-mt-x64.lib
+    )
+  endif()
   list(APPEND _HOUDINI_EXTRA_LIBRARY_NAMES
     hboost_regex
     hboost_thread
@@ -324,14 +333,24 @@ endif()
 # Explicitly configure the OpenVDB ABI version depending on the Houdini
 # version.
 
-if(Houdini_VERSION VERSION_LESS 17)
-  set(OPENVDB_HOUDINI_ABI 4)
-elseif(Houdini_VERSION VERSION_LESS 18)
-  set(OPENVDB_HOUDINI_ABI 5)
-elseif(Houdini_VERSION VERSION_LESS 18.5)
+if(Houdini_VERSION_MAJOR_MINOR VERSION_EQUAL 18.0)
   set(OPENVDB_HOUDINI_ABI 6)
-else()
+elseif(Houdini_VERSION_MAJOR_MINOR VERSION_EQUAL 18.5)
   set(OPENVDB_HOUDINI_ABI 7)
+else()
+  find_file(_houdini_openvdb_version_file "openvdb/version.h"
+    PATHS ${HOUDINI_INCLUDE_DIR}
+    NO_DEFAULT_PATH)
+  if(_houdini_openvdb_version_file)
+    OPENVDB_VERSION_FROM_HEADER("${_houdini_openvdb_version_file}"
+      ABI OPENVDB_HOUDINI_ABI)
+  endif()
+  unset(_houdini_openvdb_version_file)
+  if(NOT OPENVDB_HOUDINI_ABI)
+    message(WARNING "Unknown version of Houdini, assuming OpenVDB ABI=${OpenVDB_MAJOR_VERSION}, "
+      "but if this not correct, the CMake flag -DOPENVDB_HOUDINI_ABI=<N> can override this value.")
+    set(OPENVDB_HOUDINI_ABI ${OpenVDB_MAJOR_VERSION})
+  endif()
 endif()
 
 # ------------------------------------------------------------------------

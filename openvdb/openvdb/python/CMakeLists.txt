@@ -7,19 +7,14 @@
 
 #]=======================================================================]
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 project(OpenVDBPython LANGUAGES CXX)
 
-# Monitoring <PackageName>_ROOT variables
-if(POLICY CMP0074)
-  cmake_policy(SET CMP0074 NEW)
-endif()
 include(GNUInstallDirs)
 
 ###### OpenVDB Python Options
 
-option(USE_NUMPY [=[
-Build the python library with numpy support. Currently requires CMake 3.14.]=] OFF)
+option(USE_NUMPY "Build the python library with numpy support." OFF)
 option(OPENVDB_PYTHON_WRAP_ALL_GRID_TYPES [=[
 Expose (almost) all of the grid types in the python module. Otherwise, only FloatGrid, BoolGrid and
 Vec3SGrid will be exposed (see, e.g., exportIntGrid() in python/pyIntGrid.cc). Compiling the Python
@@ -44,8 +39,15 @@ else()
   set(OPENVDB_LIB openvdb)
 endif()
 
-set(OPENVDB_PYTHON_DEPS)
-set(OPENVDB_PYTHON_INCLUDES)
+if(USE_AX)
+  # Link the python module against openvdb_ax
+  if(NOT OPENVDB_BUILD_AX)
+    find_package(OpenVDB REQUIRED openvdb_ax)
+    set(OPENVDB_AX_LIB OpenVDB::openvdb_ax)
+  else()
+    set(OPENVDB_AX_LIB openvdb_ax)
+  endif()
+endif()
 
 # Small function which mimics basic output (bar components) of
 # FindPackageHandleStandardArgs. This is required as we want to ensure
@@ -53,82 +55,82 @@ set(OPENVDB_PYTHON_INCLUDES)
 # be provided to find_package(Python) with differing major versions. e.g.
 # calls to find_package(Python 2.7) fails if python3 is found on the system.
 function(OPENVDB_CHECK_PYTHON_VERSION)
-  set(_PY_VERSION ${ARGV0})
-  set(_PY_PATH ${ARGV1})
-  if(NOT _PY_VERSION)
-    message(FATAL_ERROR "Could NOT find Python (Required is at least version "
-      "\"${MINIMUM_PYTHON_VERSION}\")"
+  set(PY_TARGET ${ARGV0})
+  set(PY_TARGET_VERSION ${ARGV1})
+  set(PY_TARGET_INCLUDES ${ARGV2})
+  set(MIN_VERSION ${ARGV3})
+  set(FUTURE_MIN_VERSION ${ARGV4})
+
+  if(NOT TARGET ${PY_TARGET})
+    message(FATAL_ERROR "Could NOT find ${PY_TARGET} (Required is at least version "
+      "\"${MIN_VERSION}\")"
     )
-  elseif(_PY_VERSION VERSION_LESS MINIMUM_PYTHON_VERSION)
-    message(FATAL_ERROR "Could NOT find Python: Found unsuitable version \"${_PY_VERSION}\""
-      "but required is at least \"${MINIMUM_PYTHON_VERSION}\" (found ${_PY_PATH})"
-    )
-  else()
-    message(STATUS "Found Python: ${_PY_PATH}) (found suitable version \"${_PY_VERSION}\", "
-      "minimum required is \"${MINIMUM_PYTHON_VERSION}\")"
-    )
+  endif()
+
+  if(PY_TARGET_VERSION AND MIN_VERSION)
+    if(PY_TARGET_VERSION VERSION_LESS MIN_VERSION)
+      message(FATAL_ERROR "Could NOT find ${PY_TARGET}: Found unsuitable version "
+        "\"${PY_TARGET_VERSION}\" but required is at least \"${MIN_VERSION}\" (found ${PY_TARGET_INCLUDES})"
+      )
+    endif()
+  endif()
+
+  message(STATUS "Found ${PY_TARGET}: ${PY_TARGET_INCLUDES}) (found suitable "
+    "version \"${PY_TARGET_VERSION}\", minimum required is \"${MIN_VERSION}\")"
+  )
+
+  if(OPENVDB_FUTURE_DEPRECATION AND PY_TARGET_VERSION AND FUTURE_MIN_VERSION)
+    if(PY_TARGET_VERSION VERSION_LESS FUTURE_MIN_VERSION)
+      message(DEPRECATION "Support for ${PY_TARGET} versions < ${FUTURE_MIN_VERSION} "
+        "is deprecated and will be removed.")
+    endif()
   endif()
 endfunction()
 
 # Configure Python and Numpy. Note that:
-#  - find_package(Python NumPy) requires CMake >= 3.14
+#  - find_package(Python Development) target Python::Module requires CMake >= 3.15
+#  - find_package(Python Development.Module) requires CMake >= 3.18
 # To ensure consistent versions between components Interpreter, Compiler,
 # Development and NumPy, specify all components at the same time when using
-# FindPython
-# Note that the Interpreter component is only required for the python test
-if(${CMAKE_VERSION} VERSION_LESS 3.14)
-  # CMake < 3.14
-  if(OPENVDB_BUILD_PYTHON_UNITTESTS)
-    find_package(Python QUIET COMPONENTS Interpreter Development)
-  else()
-    find_package(Python QUIET COMPONENTS Development)
-  endif()
-  OPENVDB_CHECK_PYTHON_VERSION(${Python_VERSION} ${Python_INCLUDE_DIRS})
-  list(APPEND OPENVDB_PYTHON_DEPS Python::Python)
+# FindPython.
+# @note  the Python::Module target should be used over the Python::Python
+#   target but this was only added in CMake 3.15. See:
+#      https://github.com/AcademySoftwareFoundation/openvdb/issues/886
+set(OPENVDB_PYTHON_DEPS)
 
-  if(USE_NUMPY)
-    # Note: This uses our custom backport in cmake/backports
-    find_package(NumPy ${MINIMUM_NUMPY_VERSION} REQUIRED)
-    list(APPEND OPENVDB_PYTHON_DEPS Python::NumPy)
-  endif()
+# @note  explicitly only search for Development.Module from 3.18 as searching
+#   Development.Embed can cause issues on linux systems where it doesn't exist
+if(${CMAKE_VERSION} VERSION_LESS 3.18)
+  set(OPENVDB_PYTHON_REQUIRED_COMPONENTS Development)
 else()
-  # CMake >= 3.14
-  if(OPENVDB_BUILD_PYTHON_UNITTESTS)
-    find_package(Python QUIET COMPONENTS Interpreter Development)
-  else()
-    find_package(Python QUIET COMPONENTS Development)
-  endif()
+  set(OPENVDB_PYTHON_REQUIRED_COMPONENTS Development.Module)
+endif()
 
-  OPENVDB_CHECK_PYTHON_VERSION(${Python_VERSION} ${Python_INCLUDE_DIRS})
-  list(APPEND OPENVDB_PYTHON_DEPS Python::Python)
-
-  if(USE_NUMPY)
-    find_package(Python QUIET COMPONENTS NumPy)
-    if(NOT TARGET Python::NumPy)
-        message(FATAL_ERROR "Could NOT find NumPy (Required is at least version "
-          "\"${MINIMUM_NUMPY_VERSION}\")"
-        )
-    elseif(Python_NumPy_VERSION VERSION_LESS MINIMUM_NUMPY_VERSION)
-      message(FATAL_ERROR "Could NOT find NumPy: Found unsuitable version \"${Python_NumPy_VERSION}\""
-        "but required is at least \"${MINIMUM_NUMPY_VERSION}\" (found ${Python_NumPy_INCLUDE_DIRS})"
-      )
-    else()
-      message(STATUS "Found NumPy: ${Python_NumPy_INCLUDE_DIRS} (found suitable "
-        "version \"${Python_NumPy_VERSION}\", minimum required is "
-        "\"${MINIMUM_NUMPY_VERSION}\")"
-      )
-    endif()
-    list(APPEND OPENVDB_PYTHON_DEPS Python::NumPy)
-  endif()
+if(NOT DEFINED PYOPENVDB_INSTALL_DIRECTORY)
+  list(APPEND OPENVDB_PYTHON_REQUIRED_COMPONENTS Interpreter)
 endif()
 
 if(USE_NUMPY)
-  if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_NUMPY_VERSION)
-    if(Python_NumPy_VERSION VERSION_LESS FUTURE_MINIMUM_NUMPY_VERSION)
-      message(DEPRECATION "Support for NumPy versions < ${FUTURE_MINIMUM_NUMPY_VERSION} "
-        "is deprecated and will be removed.")
-    endif()
-  endif()
+  list(APPEND OPENVDB_PYTHON_REQUIRED_COMPONENTS NumPy)
+endif()
+
+# Make sure find_package(Python) is only ever invoked once with all required components
+find_package(Python COMPONENTS ${OPENVDB_PYTHON_REQUIRED_COMPONENTS})
+
+openvdb_check_python_version(Python::Module
+  "${Python_VERSION}"
+  "${Python_INCLUDE_DIRS}"
+  "${MINIMUM_PYTHON_VERSION}"
+  "${FUTURE_MINIMUM_PYTHON_VERSION}")
+list(APPEND OPENVDB_PYTHON_DEPS Python::Module)
+
+if(USE_NUMPY)
+  openvdb_check_python_version(Python::NumPy
+    "${Python_NumPy_VERSION}"
+    "${Python_NumPy_INCLUDE_DIRS}"
+    "${MINIMUM_NUMPY_VERSION}"
+    "${FUTURE_MINIMUM_NUMPY_VERSION}")
+  list(APPEND OPENVDB_PYTHON_DEPS Python::NumPy)
 endif()
 
 if(TARGET openvdb_shared AND NOT Boost_USE_STATIC_LIBS)
@@ -176,10 +178,7 @@ endif()
 # If boost >= 1.65, find the required numpy boost component and link that in.
 # Use the same system as above, first trying without the suffix, then with.
 
-if(USE_NUMPY AND (
-  (${Boost_VERSION} VERSION_EQUAL 1.65) OR
-  (${Boost_VERSION} VERSION_GREATER 1.65)))
-
+if(USE_NUMPY)
   find_package(Boost ${MINIMUM_BOOST_VERSION}
     QUIET COMPONENTS numpy${Python_VERSION_MAJOR}${Python_VERSION_MINOR}
   )
@@ -208,11 +207,6 @@ if(USE_NUMPY AND (
   endif()
 endif()
 
-set(OPENVDB_PYTHON_DEPENDENT_LIBS
-  ${OPENVDB_LIB}
-  ${OPENVDB_PYTHON_DEPS}
-)
-
 ##########################################################################
 
 set(OPENVDB_PYTHON_MODULE_SOURCE_FILES
@@ -227,8 +221,9 @@ set(OPENVDB_PYTHON_MODULE_SOURCE_FILES
 )
 
 if(NOT DEFINED PYOPENVDB_INSTALL_DIRECTORY)
+  get_filename_component(Python_PACKAGES_DIR ${Python_SITELIB} NAME)
   set(PYOPENVDB_INSTALL_DIRECTORY
-    ${CMAKE_INSTALL_LIBDIR}/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}
+    ${CMAKE_INSTALL_LIBDIR}/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/${Python_PACKAGES_DIR}
     CACHE STRING "The directory to install the pyopenvdb.so module."
   )
 endif()
@@ -249,8 +244,10 @@ elseif(WIN32)
   set_target_properties(pyopenvdb PROPERTIES SUFFIX ".pyd") # .pyd on windows
 endif()
 
-target_include_directories(pyopenvdb SYSTEM PUBLIC ${OPENVDB_PYTHON_INCLUDES})
-target_link_libraries(pyopenvdb PUBLIC ${OPENVDB_PYTHON_DEPENDENT_LIBS})
+target_link_libraries(pyopenvdb PUBLIC
+  ${OPENVDB_LIB}
+  ${OPENVDB_PYTHON_DEPS}
+)
 
 if(OPENVDB_PYTHON_WRAP_ALL_GRID_TYPES)
   target_compile_definitions(pyopenvdb PRIVATE "-DPY_OPENVDB_WRAP_ALL_GRID_TYPES")
@@ -258,29 +255,9 @@ endif()
 if(USE_NUMPY)
   target_compile_definitions(pyopenvdb PUBLIC "-DPY_OPENVDB_USE_NUMPY")
 endif()
-
-if(OPENVDB_ENABLE_RPATH)
-  # @todo There is probably a better way to do this for imported targets
-  set(RPATHS "")
-  list(APPEND RPATHS
-    ${Boost_LIBRARY_DIRS}
-    ${IlmBase_LIBRARY_DIRS}
-    ${Log4cplus_LIBRARY_DIRS}
-    ${Blosc_LIBRARY_DIRS}
-    ${Tbb_LIBRARY_DIRS}
-    ${Python_LIBRARY_DIRS}
-  )
-  if(OPENVDB_BUILD_CORE)
-    list(APPEND RPATHS ${CMAKE_INSTALL_PREFIX}/lib)
-  else()
-    list(APPEND RPATHS ${OpenVDB_LIBRARY_DIRS})
-  endif()
-
-  list(REMOVE_DUPLICATES RPATHS)
-  set_target_properties(pyopenvdb
-    PROPERTIES INSTALL_RPATH "${RPATHS}"
-  )
-  unset(RPATHS)
+if(USE_AX)
+  target_link_libraries(pyopenvdb PUBLIC ${OPENVDB_AX_LIB})
+  target_compile_definitions(pyopenvdb PUBLIC "-DPY_OPENVDB_USE_AX")
 endif()
 
 set(PYTHON_PUBLIC_INCLUDE_NAMES
@@ -293,7 +270,7 @@ install(TARGETS
   ${PYOPENVDB_INSTALL_DIRECTORY}
 )
 
-install(FILES ${PYTHON_PUBLIC_INCLUDE_NAMES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR}/python)
+install(FILES ${PYTHON_PUBLIC_INCLUDE_NAMES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/python)
 
 # pytest
 if(OPENVDB_BUILD_PYTHON_UNITTESTS)

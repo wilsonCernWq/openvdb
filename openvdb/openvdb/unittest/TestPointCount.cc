@@ -1,14 +1,15 @@
 // Copyright Contributors to the OpenVDB Project
 // SPDX-License-Identifier: MPL-2.0
 
-#include <cppunit/extensions/HelperMacros.h>
-
 #include <openvdb/points/PointDataGrid.h>
 #include <openvdb/openvdb.h>
+#include <openvdb/io/TempFile.h>
 
 #include <openvdb/points/PointGroup.h>
 #include <openvdb/points/PointCount.h>
 #include <openvdb/points/PointConversion.h>
+
+#include <gtest/gtest.h>
 
 #include <cmath>
 #include <cstdio> // for std::remove()
@@ -16,32 +17,14 @@
 #include <string>
 #include <vector>
 
-#ifdef _MSC_VER
-#include <windows.h>
-#endif
-
 using namespace openvdb;
 using namespace openvdb::points;
 
-class TestPointCount: public CppUnit::TestCase
+class TestPointCount: public ::testing::Test
 {
 public:
-
-    void setUp() override { openvdb::initialize(); }
-    void tearDown() override { openvdb::uninitialize(); }
-
-    CPPUNIT_TEST_SUITE(TestPointCount);
-    CPPUNIT_TEST(testCount);
-    CPPUNIT_TEST(testGroup);
-    CPPUNIT_TEST(testOffsets);
-    CPPUNIT_TEST(testCountGrid);
-    CPPUNIT_TEST_SUITE_END();
-
-    void testCount();
-    void testGroup();
-    void testOffsets();
-    void testCountGrid();
-
+    void SetUp() override { openvdb::initialize(); }
+    void TearDown() override { openvdb::uninitialize(); }
 }; // class TestPointCount
 
 using LeafType  = PointDataTree::LeafNodeType;
@@ -60,22 +43,21 @@ struct NotZeroFilter
     }
 };
 
-void
-TestPointCount::testCount()
+TEST_F(TestPointCount, testCount)
 {
     // create a tree and check there are no points
 
     PointDataGrid::Ptr grid = createGrid<PointDataGrid>();
     PointDataTree& tree = grid->tree();
 
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(0));
+    EXPECT_EQ(pointCount(tree), Index64(0));
 
     // add a new leaf to a tree and re-test
 
     LeafType* leafPtr = tree.touchLeaf(openvdb::Coord(0, 0, 0));
     LeafType& leaf(*leafPtr);
 
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(0));
+    EXPECT_EQ(pointCount(tree), Index64(0));
 
     // now manually set some offsets
 
@@ -88,29 +70,29 @@ TestPointCount::testCount()
 
     leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0));
 
-    CPPUNIT_ASSERT_EQUAL(int(*leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0))), 0);
-    CPPUNIT_ASSERT_EQUAL(int(leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0)).end()), 4);
+    EXPECT_EQ(int(*leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0))), 0);
+    EXPECT_EQ(int(leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0)).end()), 4);
 
-    CPPUNIT_ASSERT_EQUAL(int(*leaf.beginIndexVoxel(openvdb::Coord(0, 0, 1))), 4);
-    CPPUNIT_ASSERT_EQUAL(int(leaf.beginIndexVoxel(openvdb::Coord(0, 0, 1)).end()), 7);
+    EXPECT_EQ(int(*leaf.beginIndexVoxel(openvdb::Coord(0, 0, 1))), 4);
+    EXPECT_EQ(int(leaf.beginIndexVoxel(openvdb::Coord(0, 0, 1)).end()), 7);
 
     // test filtered, index voxel iterator
 
-    CPPUNIT_ASSERT_EQUAL(int(*leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0), NotZeroFilter())), 1);
-    CPPUNIT_ASSERT_EQUAL(int(leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0), NotZeroFilter()).end()), 4);
+    EXPECT_EQ(int(*leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0), NotZeroFilter())), 1);
+    EXPECT_EQ(int(leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0), NotZeroFilter()).end()), 4);
 
     {
         LeafType::IndexVoxelIter iter = leaf.beginIndexVoxel(openvdb::Coord(0, 0, 0));
 
-        CPPUNIT_ASSERT_EQUAL(int(*iter), 0);
-        CPPUNIT_ASSERT_EQUAL(int(iter.end()), 4);
+        EXPECT_EQ(int(*iter), 0);
+        EXPECT_EQ(int(iter.end()), 4);
 
         LeafType::IndexVoxelIter iter2 = leaf.beginIndexVoxel(openvdb::Coord(0, 0, 1));
 
-        CPPUNIT_ASSERT_EQUAL(int(*iter2), 4);
-        CPPUNIT_ASSERT_EQUAL(int(iter2.end()), 7);
+        EXPECT_EQ(int(*iter2), 4);
+        EXPECT_EQ(int(iter2.end()), 7);
 
-        CPPUNIT_ASSERT_EQUAL(iterCount(iter2), Index64(7 - 4));
+        EXPECT_EQ(iterCount(iter2), Index64(7 - 4));
 
         // check pointCount ignores active/inactive state
 
@@ -118,7 +100,7 @@ TestPointCount::testCount()
 
         LeafType::IndexVoxelIter iter3 = leaf.beginIndexVoxel(openvdb::Coord(0, 0, 1));
 
-        CPPUNIT_ASSERT_EQUAL(iterCount(iter3), Index64(7 - 4));
+        EXPECT_EQ(iterCount(iter3), Index64(7 - 4));
 
         leaf.setValueOn(1);
     }
@@ -129,26 +111,26 @@ TestPointCount::testCount()
         leaf.setOffsetOn(i, i);
     }
 
-    CPPUNIT_ASSERT_EQUAL(leaf.pointCount(), Index64(LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(leaf.onPointCount(), Index64(LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(leaf.offPointCount(), Index64(0));
+    EXPECT_EQ(leaf.pointCount(), Index64(LeafType::SIZE - 1));
+    EXPECT_EQ(leaf.onPointCount(), Index64(LeafType::SIZE - 1));
+    EXPECT_EQ(leaf.offPointCount(), Index64(0));
 
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, InactiveFilter()), Index64(0));
+    EXPECT_EQ(pointCount(tree), Index64(LeafType::SIZE - 1));
+    EXPECT_EQ(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE - 1));
+    EXPECT_EQ(pointCount(tree, InactiveFilter()), Index64(0));
 
     // manually de-activate two voxels
 
     leaf.setValueOff(100);
     leaf.setValueOff(101);
 
-    CPPUNIT_ASSERT_EQUAL(leaf.pointCount(), Index64(LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(leaf.onPointCount(), Index64(LeafType::SIZE - 3));
-    CPPUNIT_ASSERT_EQUAL(leaf.offPointCount(), Index64(2));
+    EXPECT_EQ(leaf.pointCount(), Index64(LeafType::SIZE - 1));
+    EXPECT_EQ(leaf.onPointCount(), Index64(LeafType::SIZE - 3));
+    EXPECT_EQ(leaf.offPointCount(), Index64(2));
 
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE - 3));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, InactiveFilter()), Index64(2));
+    EXPECT_EQ(pointCount(tree), Index64(LeafType::SIZE - 1));
+    EXPECT_EQ(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE - 3));
+    EXPECT_EQ(pointCount(tree, InactiveFilter()), Index64(2));
 
     // one point per every other voxel and de-activate empty voxels
 
@@ -161,13 +143,13 @@ TestPointCount::testCount()
 
     leaf.updateValueMask();
 
-    CPPUNIT_ASSERT_EQUAL(leaf.pointCount(), Index64(LeafType::SIZE / 2));
-    CPPUNIT_ASSERT_EQUAL(leaf.onPointCount(), Index64(LeafType::SIZE / 2));
-    CPPUNIT_ASSERT_EQUAL(leaf.offPointCount(), Index64(0));
+    EXPECT_EQ(leaf.pointCount(), Index64(LeafType::SIZE / 2));
+    EXPECT_EQ(leaf.onPointCount(), Index64(LeafType::SIZE / 2));
+    EXPECT_EQ(leaf.offPointCount(), Index64(0));
 
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(LeafType::SIZE / 2));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE / 2));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, InactiveFilter()), Index64(0));
+    EXPECT_EQ(pointCount(tree), Index64(LeafType::SIZE / 2));
+    EXPECT_EQ(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE / 2));
+    EXPECT_EQ(pointCount(tree, InactiveFilter()), Index64(0));
 
     // add a new non-empty leaf and check totalPointCount is correct
 
@@ -180,14 +162,13 @@ TestPointCount::testCount()
         leaf2.setOffsetOn(i, i);
     }
 
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(LeafType::SIZE / 2 + LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE / 2 + LeafType::SIZE - 1));
-    CPPUNIT_ASSERT_EQUAL(pointCount(tree, InactiveFilter()), Index64(0));
+    EXPECT_EQ(pointCount(tree), Index64(LeafType::SIZE / 2 + LeafType::SIZE - 1));
+    EXPECT_EQ(pointCount(tree, ActiveFilter()), Index64(LeafType::SIZE / 2 + LeafType::SIZE - 1));
+    EXPECT_EQ(pointCount(tree, InactiveFilter()), Index64(0));
 }
 
 
-void
-TestPointCount::testGroup()
+TEST_F(TestPointCount, testGroup)
 {
     using namespace openvdb::math;
 
@@ -203,25 +184,8 @@ TestPointCount::testGroup()
     PointDataGrid::Ptr grid = createPointDataGrid<NullCodec, PointDataGrid>(positions, *transform);
     PointDataTree& tree = grid->tree();
 
-    // setup temp directory
-
-    std::string tempDir;
-    if (const char* dir = std::getenv("TMPDIR")) tempDir = dir;
-#ifdef _MSC_VER
-    if (tempDir.empty()) {
-        char tempDirBuffer[MAX_PATH+1];
-        int tempDirLen = GetTempPath(MAX_PATH+1, tempDirBuffer);
-        CPPUNIT_ASSERT(tempDirLen > 0 && tempDirLen <= MAX_PATH);
-        tempDir = tempDirBuffer;
-    }
-#else
-    if (tempDir.empty()) tempDir = P_tmpdir;
-#endif
-
-    std::string filename;
-
     // check one leaf
-    CPPUNIT_ASSERT_EQUAL(tree.leafCount(), Index32(1));
+    EXPECT_EQ(tree.leafCount(), Index32(1));
 
     // retrieve first and last leaf attribute sets
 
@@ -229,35 +193,35 @@ TestPointCount::testGroup()
     const AttributeSet& firstAttributeSet = leafIter->attributeSet();
 
     // ensure zero groups
-    CPPUNIT_ASSERT_EQUAL(firstAttributeSet.descriptor().groupMap().size(), size_t(0));
+    EXPECT_EQ(firstAttributeSet.descriptor().groupMap().size(), size_t(0));
 
     {// add an empty group
         appendGroup(tree, "test");
 
-        CPPUNIT_ASSERT_EQUAL(firstAttributeSet.descriptor().groupMap().size(), size_t(1));
+        EXPECT_EQ(firstAttributeSet.descriptor().groupMap().size(), size_t(1));
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(4));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, ActiveFilter()), Index64(4));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, InactiveFilter()), Index64(0));
-        CPPUNIT_ASSERT_EQUAL(leafIter->pointCount(), Index64(4));
-        CPPUNIT_ASSERT_EQUAL(leafIter->onPointCount(), Index64(4));
-        CPPUNIT_ASSERT_EQUAL(leafIter->offPointCount(), Index64(0));
+        EXPECT_EQ(pointCount(tree), Index64(4));
+        EXPECT_EQ(pointCount(tree, ActiveFilter()), Index64(4));
+        EXPECT_EQ(pointCount(tree, InactiveFilter()), Index64(0));
+        EXPECT_EQ(leafIter->pointCount(), Index64(4));
+        EXPECT_EQ(leafIter->onPointCount(), Index64(4));
+        EXPECT_EQ(leafIter->offPointCount(), Index64(0));
 
         // no points found when filtered by the empty group
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, GroupFilter("test", firstAttributeSet)), Index64(0));
-        CPPUNIT_ASSERT_EQUAL(leafIter->groupPointCount("test"), Index64(0));
+        EXPECT_EQ(pointCount(tree, GroupFilter("test", firstAttributeSet)), Index64(0));
+        EXPECT_EQ(leafIter->groupPointCount("test"), Index64(0));
     }
 
     { // assign two points to the group, test offsets and point counts
         const Descriptor::GroupIndex index = firstAttributeSet.groupIndex("test");
 
-        CPPUNIT_ASSERT(index.first != AttributeSet::INVALID_POS);
-        CPPUNIT_ASSERT(index.first < firstAttributeSet.size());
+        EXPECT_TRUE(index.first != AttributeSet::INVALID_POS);
+        EXPECT_TRUE(index.first < firstAttributeSet.size());
 
         AttributeArray& array = leafIter->attributeArray(index.first);
 
-        CPPUNIT_ASSERT(isGroup(array));
+        EXPECT_TRUE(isGroup(array));
 
         GroupAttributeArray& groupArray = GroupAttributeArray::cast(array);
 
@@ -268,17 +232,17 @@ TestPointCount::testGroup()
 
         GroupFilter firstGroupFilter("test", firstAttributeSet);
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, GroupFilter("test", firstAttributeSet)), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(leafIter->groupPointCount("test"), Index64(2));
+        EXPECT_EQ(pointCount(tree, GroupFilter("test", firstAttributeSet)), Index64(2));
+        EXPECT_EQ(leafIter->groupPointCount("test"), Index64(2));
 
         {
-            CPPUNIT_ASSERT_EQUAL(pointCount(tree, BinaryFilter<GroupFilter, ActiveFilter>(
+            EXPECT_EQ(pointCount(tree, BinaryFilter<GroupFilter, ActiveFilter>(
                 firstGroupFilter, ActiveFilter())), Index64(2));
-            CPPUNIT_ASSERT_EQUAL(pointCount(tree, BinaryFilter<GroupFilter, InactiveFilter>(
+            EXPECT_EQ(pointCount(tree, BinaryFilter<GroupFilter, InactiveFilter>(
                 firstGroupFilter, InactiveFilter())), Index64(0));
         }
 
-        CPPUNIT_ASSERT_NO_THROW(leafIter->validateOffsets());
+        EXPECT_NO_THROW(leafIter->validateOffsets());
 
         // manually modify offsets so one of the points is marked as inactive
 
@@ -296,7 +260,7 @@ TestPointCount::testGroup()
 
         // confirm that validation fails
 
-        CPPUNIT_ASSERT_THROW(leafIter->validateOffsets(), openvdb::ValueError);
+        EXPECT_THROW(leafIter->validateOffsets(), openvdb::ValueError);
 
         // replace offsets with original offsets but leave value mask
 
@@ -304,29 +268,29 @@ TestPointCount::testGroup()
 
         // confirm that validation now succeeds
 
-        CPPUNIT_ASSERT_NO_THROW(leafIter->validateOffsets());
+        EXPECT_NO_THROW(leafIter->validateOffsets());
 
         // ensure active / inactive point counts are correct
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, GroupFilter("test", firstAttributeSet)), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(leafIter->groupPointCount("test"), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, BinaryFilter<GroupFilter, ActiveFilter>(
+        EXPECT_EQ(pointCount(tree, GroupFilter("test", firstAttributeSet)), Index64(2));
+        EXPECT_EQ(leafIter->groupPointCount("test"), Index64(2));
+        EXPECT_EQ(pointCount(tree, BinaryFilter<GroupFilter, ActiveFilter>(
             firstGroupFilter, ActiveFilter())), Index64(1));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, BinaryFilter<GroupFilter, InactiveFilter>(
+        EXPECT_EQ(pointCount(tree, BinaryFilter<GroupFilter, InactiveFilter>(
             firstGroupFilter, InactiveFilter())), Index64(1));
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(4));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, ActiveFilter()), Index64(3));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, InactiveFilter()), Index64(1));
+        EXPECT_EQ(pointCount(tree), Index64(4));
+        EXPECT_EQ(pointCount(tree, ActiveFilter()), Index64(3));
+        EXPECT_EQ(pointCount(tree, InactiveFilter()), Index64(1));
+
+        std::string filename;
 
         // write out grid to a temp file
         {
-            filename = tempDir + "/openvdb_test_point_load";
-
+            io::TempFile file;
+            filename = file.filename();
             io::File fileOut(filename);
-
             GridCPtrVec grids{grid};
-
             fileOut.write(grids);
         }
 
@@ -339,11 +303,11 @@ TestPointCount::testGroup()
 
             fileIn.close();
 
-            CPPUNIT_ASSERT_EQUAL(grids->size(), size_t(1));
+            EXPECT_EQ(grids->size(), size_t(1));
 
             PointDataGrid::Ptr inputGrid = GridBase::grid<PointDataGrid>((*grids)[0]);
 
-            CPPUNIT_ASSERT(inputGrid);
+            EXPECT_TRUE(inputGrid);
 
             PointDataTree& inputTree = inputGrid->tree();
             const auto& attributeSet = inputTree.cbeginLeaf()->attributeSet();
@@ -352,45 +316,47 @@ TestPointCount::testGroup()
 
             bool inCoreOnly = true;
 
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, NullFilter(), inCoreOnly), Index64(0));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, ActiveFilter(), inCoreOnly), Index64(0));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, InactiveFilter(), inCoreOnly), Index64(0));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, groupFilter, inCoreOnly), Index64(0));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, BinaryFilter<GroupFilter, ActiveFilter>(
+            EXPECT_EQ(pointCount(inputTree, NullFilter(), inCoreOnly), Index64(0));
+            EXPECT_EQ(pointCount(inputTree, ActiveFilter(), inCoreOnly), Index64(0));
+            EXPECT_EQ(pointCount(inputTree, InactiveFilter(), inCoreOnly), Index64(0));
+            EXPECT_EQ(pointCount(inputTree, groupFilter, inCoreOnly), Index64(0));
+            EXPECT_EQ(pointCount(inputTree, BinaryFilter<GroupFilter, ActiveFilter>(
                 groupFilter, ActiveFilter()), inCoreOnly), Index64(0));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, BinaryFilter<GroupFilter, InactiveFilter>(
+            EXPECT_EQ(pointCount(inputTree, BinaryFilter<GroupFilter, InactiveFilter>(
                 groupFilter, InactiveFilter()), inCoreOnly), Index64(0));
 
             inCoreOnly = false;
 
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, NullFilter(), inCoreOnly), Index64(4));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, ActiveFilter(), inCoreOnly), Index64(3));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, InactiveFilter(), inCoreOnly), Index64(1));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, groupFilter, inCoreOnly), Index64(2));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, BinaryFilter<GroupFilter, ActiveFilter>(
+            EXPECT_EQ(pointCount(inputTree, NullFilter(), inCoreOnly), Index64(4));
+            EXPECT_EQ(pointCount(inputTree, ActiveFilter(), inCoreOnly), Index64(3));
+            EXPECT_EQ(pointCount(inputTree, InactiveFilter(), inCoreOnly), Index64(1));
+            EXPECT_EQ(pointCount(inputTree, groupFilter, inCoreOnly), Index64(2));
+            EXPECT_EQ(pointCount(inputTree, BinaryFilter<GroupFilter, ActiveFilter>(
                 groupFilter, ActiveFilter()), inCoreOnly), Index64(1));
-            CPPUNIT_ASSERT_EQUAL(pointCount(inputTree, BinaryFilter<GroupFilter, InactiveFilter>(
+            EXPECT_EQ(pointCount(inputTree, BinaryFilter<GroupFilter, InactiveFilter>(
                 groupFilter, InactiveFilter()), inCoreOnly), Index64(1));
         }
+
+        std::remove(filename.c_str());
 
         // update the value mask and confirm point counts once again
 
         leafIter->updateValueMask();
 
-        CPPUNIT_ASSERT_NO_THROW(leafIter->validateOffsets());
+        EXPECT_NO_THROW(leafIter->validateOffsets());
 
         auto& attributeSet = tree.cbeginLeaf()->attributeSet();
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, GroupFilter("test", attributeSet)), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(leafIter->groupPointCount("test"), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, BinaryFilter<GroupFilter, ActiveFilter>(
+        EXPECT_EQ(pointCount(tree, GroupFilter("test", attributeSet)), Index64(2));
+        EXPECT_EQ(leafIter->groupPointCount("test"), Index64(2));
+        EXPECT_EQ(pointCount(tree, BinaryFilter<GroupFilter, ActiveFilter>(
             firstGroupFilter, ActiveFilter())), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, BinaryFilter<GroupFilter, InactiveFilter>(
+        EXPECT_EQ(pointCount(tree, BinaryFilter<GroupFilter, InactiveFilter>(
             firstGroupFilter, InactiveFilter())), Index64(0));
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree), Index64(4));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, ActiveFilter()), Index64(4));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree, InactiveFilter()), Index64(0));
+        EXPECT_EQ(pointCount(tree), Index64(4));
+        EXPECT_EQ(pointCount(tree, ActiveFilter()), Index64(4));
+        EXPECT_EQ(pointCount(tree, InactiveFilter()), Index64(0));
     }
 
     // create a tree with multiple leaves
@@ -402,7 +368,7 @@ TestPointCount::testGroup()
     grid = createPointDataGrid<NullCodec, PointDataGrid>(positions, *transform);
     PointDataTree& tree2 = grid->tree();
 
-    CPPUNIT_ASSERT_EQUAL(tree2.leafCount(), Index32(4));
+    EXPECT_EQ(tree2.leafCount(), Index32(4));
 
     leafIter = tree2.beginLeaf();
 
@@ -412,53 +378,61 @@ TestPointCount::testGroup()
         const auto& attributeSet = leafIter->attributeSet();
         const Descriptor::GroupIndex index = attributeSet.groupIndex("test");
 
-        CPPUNIT_ASSERT(index.first != AttributeSet::INVALID_POS);
-        CPPUNIT_ASSERT(index.first < attributeSet.size());
+        EXPECT_TRUE(index.first != AttributeSet::INVALID_POS);
+        EXPECT_TRUE(index.first < attributeSet.size());
 
         AttributeArray& array = leafIter->attributeArray(index.first);
 
-        CPPUNIT_ASSERT(isGroup(array));
+        EXPECT_TRUE(isGroup(array));
 
         GroupAttributeArray& groupArray = GroupAttributeArray::cast(array);
 
         groupArray.set(0, GroupType(1) << index.second);
         groupArray.set(3, GroupType(1) << index.second);
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree2, GroupFilter("test", attributeSet)), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(leafIter->groupPointCount("test"), Index64(2));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree2), Index64(7));
+        EXPECT_EQ(pointCount(tree2, GroupFilter("test", attributeSet)), Index64(2));
+        EXPECT_EQ(leafIter->groupPointCount("test"), Index64(2));
+        EXPECT_EQ(pointCount(tree2), Index64(7));
     }
 
     ++leafIter;
 
-    CPPUNIT_ASSERT(leafIter);
+    EXPECT_TRUE(leafIter);
 
     { // assign another point to the group in a different leaf
         const auto& attributeSet = leafIter->attributeSet();
         const Descriptor::GroupIndex index = attributeSet.groupIndex("test");
 
-        CPPUNIT_ASSERT(index.first != AttributeSet::INVALID_POS);
-        CPPUNIT_ASSERT(index.first < leafIter->attributeSet().size());
+        EXPECT_TRUE(index.first != AttributeSet::INVALID_POS);
+        EXPECT_TRUE(index.first < leafIter->attributeSet().size());
 
         AttributeArray& array = leafIter->attributeArray(index.first);
 
-        CPPUNIT_ASSERT(isGroup(array));
+        EXPECT_TRUE(isGroup(array));
 
         GroupAttributeArray& groupArray = GroupAttributeArray::cast(array);
 
         groupArray.set(0, GroupType(1) << index.second);
 
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree2, GroupFilter("test", attributeSet)), Index64(3));
-        CPPUNIT_ASSERT_EQUAL(leafIter->groupPointCount("test"), Index64(1));
-        CPPUNIT_ASSERT_EQUAL(pointCount(tree2), Index64(7));
+        EXPECT_EQ(pointCount(tree2, GroupFilter("test", attributeSet)), Index64(3));
+        EXPECT_EQ(leafIter->groupPointCount("test"), Index64(1));
+        EXPECT_EQ(pointCount(tree2), Index64(7));
     }
 }
 
 
-void
-TestPointCount::testOffsets()
+TEST_F(TestPointCount, testOffsets)
 {
     using namespace openvdb::math;
+
+    // empty tree
+    {
+        PointDataTree tree;
+        std::vector<Index64> offsets{ 10 };
+        Index64 total = pointOffsets(offsets, tree);
+        EXPECT_EQ(total, Index64(0));
+        EXPECT_TRUE(offsets.empty());
+    }
 
     const float voxelSize(1.0);
     math::Transform::Ptr transform(math::Transform::createLinearTransform(voxelSize));
@@ -474,12 +448,12 @@ TestPointCount::testOffsets()
         std::vector<Index64> offsets;
         Index64 total = pointOffsets(offsets, tree);
 
-        CPPUNIT_ASSERT_EQUAL(offsets.size(), size_t(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[0], Index64(1));
-        CPPUNIT_ASSERT_EQUAL(offsets[1], Index64(3));
-        CPPUNIT_ASSERT_EQUAL(offsets[2], Index64(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[3], Index64(5));
-        CPPUNIT_ASSERT_EQUAL(total, Index64(5));
+        EXPECT_EQ(offsets.size(), size_t(4));
+        EXPECT_EQ(offsets[0], Index64(1));
+        EXPECT_EQ(offsets[1], Index64(3));
+        EXPECT_EQ(offsets[2], Index64(4));
+        EXPECT_EQ(offsets[3], Index64(5));
+        EXPECT_EQ(total, Index64(5));
     }
 
     { // all point offsets when using a non-existant exclude group
@@ -492,12 +466,12 @@ TestPointCount::testOffsets()
         MultiGroupFilter filter(includeGroups, excludeGroups, tree.cbeginLeaf()->attributeSet());
         Index64 total = pointOffsets(offsets, tree, filter);
 
-        CPPUNIT_ASSERT_EQUAL(offsets.size(), size_t(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[0], Index64(1));
-        CPPUNIT_ASSERT_EQUAL(offsets[1], Index64(3));
-        CPPUNIT_ASSERT_EQUAL(offsets[2], Index64(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[3], Index64(5));
-        CPPUNIT_ASSERT_EQUAL(total, Index64(5));
+        EXPECT_EQ(offsets.size(), size_t(4));
+        EXPECT_EQ(offsets[0], Index64(1));
+        EXPECT_EQ(offsets[1], Index64(3));
+        EXPECT_EQ(offsets[2], Index64(4));
+        EXPECT_EQ(offsets[3], Index64(5));
+        EXPECT_EQ(total, Index64(5));
     }
 
     appendGroup(tree, "test");
@@ -517,12 +491,12 @@ TestPointCount::testOffsets()
         MultiGroupFilter filter(includeGroups, excludeGroups, tree.cbeginLeaf()->attributeSet());
         Index64 total = pointOffsets(offsets, tree, filter);
 
-        CPPUNIT_ASSERT_EQUAL(offsets.size(), size_t(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[0], Index64(0));
-        CPPUNIT_ASSERT_EQUAL(offsets[1], Index64(1));
-        CPPUNIT_ASSERT_EQUAL(offsets[2], Index64(1));
-        CPPUNIT_ASSERT_EQUAL(offsets[3], Index64(1));
-        CPPUNIT_ASSERT_EQUAL(total, Index64(1));
+        EXPECT_EQ(offsets.size(), size_t(4));
+        EXPECT_EQ(offsets[0], Index64(0));
+        EXPECT_EQ(offsets[1], Index64(1));
+        EXPECT_EQ(offsets[2], Index64(1));
+        EXPECT_EQ(offsets[3], Index64(1));
+        EXPECT_EQ(total, Index64(1));
     }
 
     { // exclude this group
@@ -534,39 +508,22 @@ TestPointCount::testOffsets()
         MultiGroupFilter filter(includeGroups, excludeGroups, tree.cbeginLeaf()->attributeSet());
         Index64 total = pointOffsets(offsets, tree, filter);
 
-        CPPUNIT_ASSERT_EQUAL(offsets.size(), size_t(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[0], Index64(1));
-        CPPUNIT_ASSERT_EQUAL(offsets[1], Index64(2));
-        CPPUNIT_ASSERT_EQUAL(offsets[2], Index64(3));
-        CPPUNIT_ASSERT_EQUAL(offsets[3], Index64(4));
-        CPPUNIT_ASSERT_EQUAL(total, Index64(4));
+        EXPECT_EQ(offsets.size(), size_t(4));
+        EXPECT_EQ(offsets[0], Index64(1));
+        EXPECT_EQ(offsets[1], Index64(2));
+        EXPECT_EQ(offsets[2], Index64(3));
+        EXPECT_EQ(offsets[3], Index64(4));
+        EXPECT_EQ(total, Index64(4));
     }
-
-    // setup temp directory
-
-    std::string tempDir;
-    if (const char* dir = std::getenv("TMPDIR")) tempDir = dir;
-#ifdef _MSC_VER
-    if (tempDir.empty()) {
-        char tempDirBuffer[MAX_PATH+1];
-        int tempDirLen = GetTempPath(MAX_PATH+1, tempDirBuffer);
-        CPPUNIT_ASSERT(tempDirLen > 0 && tempDirLen <= MAX_PATH);
-        tempDir = tempDirBuffer;
-    }
-#else
-    if (tempDir.empty()) tempDir = P_tmpdir;
-#endif
 
     std::string filename;
 
     // write out grid to a temp file
     {
-        filename = tempDir + "/openvdb_test_point_load";
-
+        io::TempFile file;
+        filename = file.filename();
         io::File fileOut(filename);
-
         GridCPtrVec grids{grid};
-
         fileOut.write(grids);
     }
 
@@ -579,11 +536,11 @@ TestPointCount::testOffsets()
 
         fileIn.close();
 
-        CPPUNIT_ASSERT_EQUAL(grids->size(), size_t(1));
+        EXPECT_EQ(grids->size(), size_t(1));
 
         PointDataGrid::Ptr inputGrid = GridBase::grid<PointDataGrid>((*grids)[0]);
 
-        CPPUNIT_ASSERT(inputGrid);
+        EXPECT_TRUE(inputGrid);
 
         PointDataTree& inputTree = inputGrid->tree();
 
@@ -594,24 +551,25 @@ TestPointCount::testOffsets()
         MultiGroupFilter filter(includeGroups, excludeGroups, inputTree.cbeginLeaf()->attributeSet());
         Index64 total = pointOffsets(offsets, inputTree, filter, /*inCoreOnly=*/true);
 
-        CPPUNIT_ASSERT_EQUAL(offsets.size(), size_t(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[0], Index64(0));
-        CPPUNIT_ASSERT_EQUAL(offsets[1], Index64(0));
-        CPPUNIT_ASSERT_EQUAL(offsets[2], Index64(0));
-        CPPUNIT_ASSERT_EQUAL(offsets[3], Index64(0));
-        CPPUNIT_ASSERT_EQUAL(total, Index64(0));
+        EXPECT_EQ(offsets.size(), size_t(4));
+        EXPECT_EQ(offsets[0], Index64(0));
+        EXPECT_EQ(offsets[1], Index64(0));
+        EXPECT_EQ(offsets[2], Index64(0));
+        EXPECT_EQ(offsets[3], Index64(0));
+        EXPECT_EQ(total, Index64(0));
 
         offsets.clear();
 
         total = pointOffsets(offsets, inputTree, filter, /*inCoreOnly=*/false);
 
-        CPPUNIT_ASSERT_EQUAL(offsets.size(), size_t(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[0], Index64(1));
-        CPPUNIT_ASSERT_EQUAL(offsets[1], Index64(3));
-        CPPUNIT_ASSERT_EQUAL(offsets[2], Index64(4));
-        CPPUNIT_ASSERT_EQUAL(offsets[3], Index64(5));
-        CPPUNIT_ASSERT_EQUAL(total, Index64(5));
+        EXPECT_EQ(offsets.size(), size_t(4));
+        EXPECT_EQ(offsets[0], Index64(1));
+        EXPECT_EQ(offsets[1], Index64(3));
+        EXPECT_EQ(offsets[2], Index64(4));
+        EXPECT_EQ(offsets[3], Index64(5));
+        EXPECT_EQ(total, Index64(5));
     }
+
     std::remove(filename.c_str());
 }
 
@@ -671,8 +629,7 @@ genPoints(std::vector<Vec3R>& positions, const int numPoints, const double scale
 } // namespace
 
 
-void
-TestPointCount::testCountGrid()
+TEST_F(TestPointCount, testCountGrid)
 {
     using namespace openvdb::math;
 
@@ -692,9 +649,9 @@ TestPointCount::testCountGrid()
 
             Int32Grid::Ptr count = pointCountGrid(*points);
 
-            CPPUNIT_ASSERT_EQUAL(count->activeVoxelCount(), points->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count), pointCount(points->tree()));
+            EXPECT_EQ(count->activeVoxelCount(), points->activeVoxelCount());
+            EXPECT_EQ(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count), pointCount(points->tree()));
         }
 
         { // in four voxels
@@ -706,9 +663,9 @@ TestPointCount::testCountGrid()
 
             Int32Grid::Ptr count = pointCountGrid(*points);
 
-            CPPUNIT_ASSERT_EQUAL(count->activeVoxelCount(), points->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count), pointCount(points->tree()));
+            EXPECT_EQ(count->activeVoxelCount(), points->activeVoxelCount());
+            EXPECT_EQ(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count), pointCount(points->tree()));
         }
 
         { // in one voxel
@@ -720,9 +677,9 @@ TestPointCount::testCountGrid()
 
             Int32Grid::Ptr count = pointCountGrid(*points);
 
-            CPPUNIT_ASSERT_EQUAL(count->activeVoxelCount(), points->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count), pointCount(points->tree()));
+            EXPECT_EQ(count->activeVoxelCount(), points->activeVoxelCount());
+            EXPECT_EQ(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count), pointCount(points->tree()));
         }
 
         { // in four voxels, Int64 grid
@@ -734,9 +691,9 @@ TestPointCount::testCountGrid()
 
             Int64Grid::Ptr count = pointCountGrid<PointDataGrid, Int64Grid>(*points);
 
-            CPPUNIT_ASSERT_EQUAL(count->activeVoxelCount(), points->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count), pointCount(points->tree()));
+            EXPECT_EQ(count->activeVoxelCount(), points->activeVoxelCount());
+            EXPECT_EQ(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count), pointCount(points->tree()));
         }
 
         { // in four voxels, float grid
@@ -748,9 +705,9 @@ TestPointCount::testCountGrid()
 
             FloatGrid::Ptr count = pointCountGrid<PointDataGrid, FloatGrid>(*points);
 
-            CPPUNIT_ASSERT_EQUAL(count->activeVoxelCount(), points->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count), pointCount(points->tree()));
+            EXPECT_EQ(count->activeVoxelCount(), points->activeVoxelCount());
+            EXPECT_EQ(count->evalActiveVoxelBoundingBox(), points->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count), pointCount(points->tree()));
         }
 
         { // in four voxels
@@ -783,15 +740,15 @@ TestPointCount::testCountGrid()
                 tree.cbeginLeaf()->attributeSet());
             Int32Grid::Ptr count = pointCountGrid(*points, filter);
 
-            CPPUNIT_ASSERT_EQUAL(count->activeVoxelCount(), Index64(1));
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count), Index64(1));
+            EXPECT_EQ(count->activeVoxelCount(), Index64(1));
+            EXPECT_EQ(voxelSum(*count), Index64(1));
 
             MultiGroupFilter filter2(excludeGroups, includeGroups,
                 tree.cbeginLeaf()->attributeSet());
             count = pointCountGrid(*points, filter2);
 
-            CPPUNIT_ASSERT_EQUAL(count->activeVoxelCount(), Index64(4));
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count), Index64(4));
+            EXPECT_EQ(count->activeVoxelCount(), Index64(4));
+            EXPECT_EQ(voxelSum(*count), Index64(4));
         }
     }
 
@@ -799,7 +756,7 @@ TestPointCount::testCountGrid()
         std::vector<Vec3R> positions;
         const size_t total = 40000;
         genPoints(positions, total, /*scale=*/100.0);
-        CPPUNIT_ASSERT_EQUAL(positions.size(), total);
+        EXPECT_EQ(positions.size(), total);
 
         math::Transform::Ptr transform1(math::Transform::createLinearTransform(1.0f));
         math::Transform::Ptr transform5(math::Transform::createLinearTransform(5.0f));
@@ -809,41 +766,38 @@ TestPointCount::testCountGrid()
         PointDataGrid::Ptr points5 =
             createPointDataGrid<NullCodec, PointDataGrid>(positions, *transform5);
 
-        CPPUNIT_ASSERT(points1->activeVoxelCount() != points5->activeVoxelCount());
-        CPPUNIT_ASSERT(points1->evalActiveVoxelBoundingBox() != points5->evalActiveVoxelBoundingBox());
-        CPPUNIT_ASSERT_EQUAL(pointCount(points1->tree()), pointCount(points5->tree()));
+        EXPECT_TRUE(points1->activeVoxelCount() != points5->activeVoxelCount());
+        EXPECT_TRUE(points1->evalActiveVoxelBoundingBox() != points5->evalActiveVoxelBoundingBox());
+        EXPECT_EQ(pointCount(points1->tree()), pointCount(points5->tree()));
 
         { // generate count grids with the same transform
 
             Int32Grid::Ptr count1 = pointCountGrid(*points1);
 
-            CPPUNIT_ASSERT_EQUAL(count1->activeVoxelCount(), points1->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count1->evalActiveVoxelBoundingBox(), points1->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count1), pointCount(points1->tree()));
+            EXPECT_EQ(count1->activeVoxelCount(), points1->activeVoxelCount());
+            EXPECT_EQ(count1->evalActiveVoxelBoundingBox(), points1->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count1), pointCount(points1->tree()));
 
             Int32Grid::Ptr count5 = pointCountGrid(*points5);
 
-            CPPUNIT_ASSERT_EQUAL(count5->activeVoxelCount(), points5->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count5->evalActiveVoxelBoundingBox(), points5->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count5), pointCount(points5->tree()));
+            EXPECT_EQ(count5->activeVoxelCount(), points5->activeVoxelCount());
+            EXPECT_EQ(count5->evalActiveVoxelBoundingBox(), points5->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count5), pointCount(points5->tree()));
         }
 
         { // generate count grids with differing transforms
 
             Int32Grid::Ptr count1 = pointCountGrid(*points5, *transform1);
 
-            CPPUNIT_ASSERT_EQUAL(count1->activeVoxelCount(), points1->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count1->evalActiveVoxelBoundingBox(), points1->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count1), pointCount(points5->tree()));
+            EXPECT_EQ(count1->activeVoxelCount(), points1->activeVoxelCount());
+            EXPECT_EQ(count1->evalActiveVoxelBoundingBox(), points1->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count1), pointCount(points5->tree()));
 
             Int32Grid::Ptr count5 = pointCountGrid(*points1, *transform5);
 
-            CPPUNIT_ASSERT_EQUAL(count5->activeVoxelCount(), points5->activeVoxelCount());
-            CPPUNIT_ASSERT_EQUAL(count5->evalActiveVoxelBoundingBox(), points5->evalActiveVoxelBoundingBox());
-            CPPUNIT_ASSERT_EQUAL(voxelSum(*count5), pointCount(points1->tree()));
+            EXPECT_EQ(count5->activeVoxelCount(), points5->activeVoxelCount());
+            EXPECT_EQ(count5->evalActiveVoxelBoundingBox(), points5->evalActiveVoxelBoundingBox());
+            EXPECT_EQ(voxelSum(*count5), pointCount(points1->tree()));
         }
     }
 }
-
-
-CPPUNIT_TEST_SUITE_REGISTRATION(TestPointCount);

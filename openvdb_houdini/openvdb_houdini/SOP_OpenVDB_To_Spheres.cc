@@ -241,7 +241,9 @@ SOP_OpenVDB_To_Spheres::resolveObsoleteParms(PRM_ParmList* obsoleteParms)
     resolveRenamedParm(*obsoleteParms, "minradius", "radiusmin");
 
     // If world units are enabled, use the old world-space radius bounds if they exist.
-    if (worldUnits && obsoleteParms->getParmPtr("minradiusworld")) {
+    if (worldUnits
+        && obsoleteParms->getParmPtr("minradiusworld")
+        && !obsoleteParms->getParmPtr("minradiusworld")->isFactoryDefault()) {
         setFloat("radiusmin", 0, time, obsoleteParms->evalFloat("minradiusworld", 0, time));
     }
     {
@@ -298,7 +300,7 @@ SOP_OpenVDB_To_Spheres::Cache::cookVDBSop(OP_Context& context)
     try {
         const fpreal time = context.getTime();
 
-        hvdb::Interrupter boss("Filling VDBs with spheres");
+        hvdb::HoudiniInterrupter boss("Filling VDBs with spheres");
 
         const GU_Detail* vdbGeo = inputGeo(0);
         if (vdbGeo == nullptr) return error();
@@ -388,7 +390,7 @@ SOP_OpenVDB_To_Spheres::Cache::cookVDBSop(OP_Context& context)
                     openvdb::gridConstPtrCast<openvdb::FloatGrid>(vdbIt->getGridPtr());
 
                 openvdb::tools::fillWithSpheres(*gridPtr, spheres, sphereCount, overlapping,
-                    radiusRange[0], radiusRange[1], isovalue, scatter, &boss);
+                    radiusRange[0], radiusRange[1], isovalue, scatter, &boss.interrupter());
 
 
             } else if (vdbIt->getGrid().type() == openvdb::DoubleGrid::gridType()) {
@@ -397,7 +399,7 @@ SOP_OpenVDB_To_Spheres::Cache::cookVDBSop(OP_Context& context)
                     openvdb::gridConstPtrCast<openvdb::DoubleGrid>(vdbIt->getGridPtr());
 
                 openvdb::tools::fillWithSpheres(*gridPtr, spheres, sphereCount, overlapping,
-                    radiusRange[0], radiusRange[1], isovalue, scatter, &boss);
+                    radiusRange[0], radiusRange[1], isovalue, scatter, &boss.interrupter());
 
             } else {
                 skippedGrids.push_back(vdbIt.getPrimitiveNameOrIndex().toStdString());

@@ -16,12 +16,14 @@
 #ifndef OPENVDB_TOOLS_MESH_TO_VOLUME_HAS_BEEN_INCLUDED
 #define OPENVDB_TOOLS_MESH_TO_VOLUME_HAS_BEEN_INCLUDED
 
-#include <openvdb/Platform.h> // for OPENVDB_HAS_CXX11
-#include <openvdb/Types.h>
-#include <openvdb/math/FiniteDifference.h> // for GodunovsNormSqrd
-#include <openvdb/math/Proximity.h> // for closestPointOnTriangleToPoint
-#include <openvdb/util/NullInterrupter.h>
-#include <openvdb/util/Util.h>
+#include "openvdb/Platform.h" // for OPENVDB_HAS_CXX11
+#include "openvdb/Types.h"
+#include "openvdb/math/FiniteDifference.h" // for GodunovsNormSqrd
+#include "openvdb/math/Proximity.h" // for closestPointOnTriangleToPoint
+#include "openvdb/util/NullInterrupter.h"
+#include "openvdb/util/Util.h"
+#include "openvdb/thread/Threading.h"
+#include <openvdb/openvdb.h>
 
 #include "ChangeBackground.h"
 #include "Prune.h" // for pruneInactive and pruneLevelSet
@@ -33,7 +35,7 @@
 #include <tbb/parallel_reduce.h>
 #include <tbb/partitioner.h>
 #include <tbb/task_group.h>
-#include <tbb/task_scheduler_init.h>
+#include <tbb/task_arena.h>
 
 #include <algorithm> // for std::sort()
 #include <cmath> // for std::isfinite(), std::isnan()
@@ -107,7 +109,7 @@ enum MeshToVolumeFlags {
 /// @param polygonIndexGrid   optional grid output that will contain the closest-polygon
 ///                           index for each voxel in the narrow band region
 template <typename GridType, typename MeshDataAdapter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToVolume(
   const MeshDataAdapter& mesh,
   const math::Transform& transform,
@@ -133,7 +135,7 @@ meshToVolume(
 /// @param polygonIndexGrid   optional grid output that will contain the closest-polygon
 ///                           index for each voxel in the active narrow band region
 template <typename GridType, typename MeshDataAdapter, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToVolume(
     Interrupter& interrupter,
     const MeshDataAdapter& mesh,
@@ -228,7 +230,7 @@ private:
 /// @param triangles    triangle index list
 /// @param halfWidth    half the width of the narrow band, in voxel units
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -237,7 +239,7 @@ meshToLevelSet(
 
 /// Adds support for a @a interrupter callback used to cancel the conversion.
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -262,7 +264,7 @@ meshToLevelSet(
 /// @param quads        quad index list
 /// @param halfWidth    half the width of the narrow band, in voxel units
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -271,7 +273,7 @@ meshToLevelSet(
 
 /// Adds support for a @a interrupter callback used to cancel the conversion.
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -297,7 +299,7 @@ meshToLevelSet(
 /// @param quads        quad index list
 /// @param halfWidth    half the width of the narrow band, in voxel units
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -307,7 +309,7 @@ meshToLevelSet(
 
 /// Adds support for a @a interrupter callback used to cancel the conversion.
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -336,7 +338,7 @@ meshToLevelSet(
 /// @param exBandWidth  the exterior narrow-band width in voxel units
 /// @param inBandWidth  the interior narrow-band width in voxel units
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToSignedDistanceField(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -347,7 +349,7 @@ meshToSignedDistanceField(
 
 /// Adds support for a @a interrupter callback used to cancel the conversion.
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToSignedDistanceField(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -373,7 +375,7 @@ meshToSignedDistanceField(
 /// @param quads        quad index list
 /// @param bandWidth    the width of the narrow band, in voxel units
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToUnsignedDistanceField(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -383,7 +385,7 @@ meshToUnsignedDistanceField(
 
 /// Adds support for a @a interrupter callback used to cancel the conversion.
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToUnsignedDistanceField(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -403,7 +405,7 @@ meshToUnsignedDistanceField(
 /// @param xform      world-to-index-space transform
 /// @param halfWidth  half the width of the narrow band, in voxel units
 template<typename GridType, typename VecType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 createLevelSetBox(const math::BBox<VecType>& bbox,
     const openvdb::math::Transform& xform,
     typename VecType::ValueType halfWidth = LEVEL_SET_HALF_WIDTH);
@@ -419,7 +421,7 @@ createLevelSetBox(const math::BBox<VecType>& bbox,
 ///
 /// @note   Does not propagate sign information into tile regions.
 template <typename FloatTreeT>
-inline void
+void
 traceExteriorBoundaries(FloatTreeT& tree);
 
 
@@ -503,6 +505,8 @@ private:
 
 
 // Internal utility objects and implementation details
+
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace mesh_to_volume_internal {
 
@@ -1132,7 +1136,7 @@ inline void
 fillArray(ValueType* array, const ValueType val, const size_t length)
 {
     const auto grainSize = std::max<size_t>(
-        length / tbb::task_scheduler_init::default_num_threads(), 1024);
+        length / tbb::this_task_arena::max_concurrency(), 1024);
     const tbb::blocked_range<size_t> range(0, length, grainSize);
     tbb::parallel_for(range, FillArray<ValueType>(array, val), tbb::simple_partitioner());
 }
@@ -1989,7 +1993,7 @@ public:
         for (size_t n = range.begin(), N = range.end(); n < N; ++n) {
 
             if (this->wasInterrupted()) {
-                tbb::task::self().cancel_group_execution();
+                thread::cancelGroupExecution();
                 break;
             }
 
@@ -2143,7 +2147,7 @@ private:
 
         while (!coordList.empty()) {
             if (interrupter && interrupter->wasInterrupted()) {
-                tbb::task::self().cancel_group_execution();
+                thread::cancelGroupExecution();
                 break;
             }
             for (Int32 pass = 0; pass < 1048576 && !coordList.empty(); ++pass) {
@@ -3008,6 +3012,8 @@ private:
 
 } // mesh_to_volume_internal namespace
 
+/// @endcond
+
 
 ////////////////////////////////////////
 
@@ -3015,7 +3021,7 @@ private:
 
 
 template <typename FloatTreeT>
-inline void
+void
 traceExteriorBoundaries(FloatTreeT& tree)
 {
     using ConnectivityTable = mesh_to_volume_internal::LeafNodeConnectivityTable<FloatTreeT>;
@@ -3114,7 +3120,7 @@ traceExteriorBoundaries(FloatTreeT& tree)
 
 
 template <typename GridType, typename MeshDataAdapter, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToVolume(
   Interrupter& interrupter,
   const MeshDataAdapter& mesh,
@@ -3416,7 +3422,7 @@ meshToVolume(
 
 
 template <typename GridType, typename MeshDataAdapter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToVolume(
   const MeshDataAdapter& mesh,
   const math::Transform& transform,
@@ -3435,7 +3441,7 @@ meshToVolume(
 
 
 //{
-/// @cond OPENVDB_MESH_TO_VOLUME_INTERNAL
+/// @cond OPENVDB_DOCS_INTERNAL
 
 /// @internal This overload is enabled only for grids with a scalar, floating-point ValueType.
 template<typename GridType, typename Interrupter>
@@ -3536,7 +3542,7 @@ doMeshConversion(
 
 
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -3544,14 +3550,12 @@ meshToLevelSet(
     float halfWidth)
 {
     util::NullInterrupter nullInterrupter;
-    std::vector<Vec4I> quads(0);
-    return doMeshConversion<GridType>(nullInterrupter, xform, points, triangles, quads,
-        halfWidth, halfWidth);
+    return meshToLevelSet<GridType>(nullInterrupter, xform, points, triangles, halfWidth);
 }
 
 
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -3566,7 +3570,7 @@ meshToLevelSet(
 
 
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -3574,14 +3578,12 @@ meshToLevelSet(
     float halfWidth)
 {
     util::NullInterrupter nullInterrupter;
-    std::vector<Vec3I> triangles(0);
-    return doMeshConversion<GridType>(nullInterrupter, xform, points, triangles, quads,
-        halfWidth, halfWidth);
+    return meshToLevelSet<GridType>(nullInterrupter, xform, points, quads, halfWidth);
 }
 
 
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -3596,7 +3598,7 @@ meshToLevelSet(
 
 
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -3605,13 +3607,13 @@ meshToLevelSet(
     float halfWidth)
 {
     util::NullInterrupter nullInterrupter;
-    return doMeshConversion<GridType>(nullInterrupter, xform, points, triangles, quads,
-        halfWidth, halfWidth);
+    return meshToLevelSet<GridType>(
+        nullInterrupter, xform, points, triangles, quads, halfWidth);
 }
 
 
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToLevelSet(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -3626,7 +3628,7 @@ meshToLevelSet(
 
 
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToSignedDistanceField(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -3636,13 +3638,13 @@ meshToSignedDistanceField(
     float inBandWidth)
 {
     util::NullInterrupter nullInterrupter;
-    return doMeshConversion<GridType>(nullInterrupter, xform, points, triangles,
-        quads, exBandWidth, inBandWidth);
+    return meshToSignedDistanceField<GridType>(
+        nullInterrupter, xform, points, triangles, quads, exBandWidth, inBandWidth);
 }
 
 
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToSignedDistanceField(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -3658,7 +3660,7 @@ meshToSignedDistanceField(
 
 
 template<typename GridType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToUnsignedDistanceField(
     const openvdb::math::Transform& xform,
     const std::vector<Vec3s>& points,
@@ -3667,13 +3669,13 @@ meshToUnsignedDistanceField(
     float bandWidth)
 {
     util::NullInterrupter nullInterrupter;
-    return doMeshConversion<GridType>(nullInterrupter, xform, points, triangles, quads,
-        bandWidth, bandWidth, true);
+    return meshToUnsignedDistanceField<GridType>(
+        nullInterrupter, xform, points, triangles, quads, bandWidth);
 }
 
 
 template<typename GridType, typename Interrupter>
-inline typename GridType::Ptr
+typename GridType::Ptr
 meshToUnsignedDistanceField(
     Interrupter& interrupter,
     const openvdb::math::Transform& xform,
@@ -4199,7 +4201,7 @@ MeshToVoxelEdgeData::getEdgeData(
 
 
 template<typename GridType, typename VecType>
-inline typename GridType::Ptr
+typename GridType::Ptr
 createLevelSetBox(const math::BBox<VecType>& bbox,
     const openvdb::math::Transform& xform,
     typename VecType::ValueType halfWidth)
@@ -4227,8 +4229,88 @@ createLevelSetBox(const math::BBox<VecType>& bbox,
 
     QuadAndTriangleDataAdapter<Vec3s, Vec4I> mesh(points, 8, faces, 6);
 
-    return meshToVolume<GridType>(mesh, xform, halfWidth, halfWidth);
+    return meshToVolume<GridType>(mesh, xform, static_cast<float>(halfWidth), static_cast<float>(halfWidth));
 }
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_MESHTOVOLUME
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr meshToVolume<Grid<TreeT>>(util::NullInterrupter&, \
+        const QuadAndTriangleDataAdapter<Vec3s, Vec3I>&, const openvdb::math::Transform&, \
+        float, float, int, Grid<TreeT>::ValueConverter<Int32>::Type*)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr meshToVolume<Grid<TreeT>>(util::NullInterrupter&, \
+        const QuadAndTriangleDataAdapter<Vec3s, Vec4I>&, const openvdb::math::Transform&, \
+        float, float, int, Grid<TreeT>::ValueConverter<Int32>::Type*)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr meshToLevelSet<Grid<TreeT>>(util::NullInterrupter&, \
+        const openvdb::math::Transform&, const std::vector<Vec3s>&, const std::vector<Vec3I>&, \
+        float)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr meshToLevelSet<Grid<TreeT>>(util::NullInterrupter&, \
+        const openvdb::math::Transform&, const std::vector<Vec3s>&, const std::vector<Vec4I>&, \
+        float)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr meshToLevelSet<Grid<TreeT>>(util::NullInterrupter&, \
+        const openvdb::math::Transform&, const std::vector<Vec3s>&, \
+        const std::vector<Vec3I>&, const std::vector<Vec4I>&, float)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr meshToSignedDistanceField<Grid<TreeT>>(util::NullInterrupter&, \
+        const openvdb::math::Transform&, const std::vector<Vec3s>&, \
+        const std::vector<Vec3I>&, const std::vector<Vec4I>&, float, float)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr meshToUnsignedDistanceField<Grid<TreeT>>(util::NullInterrupter&, \
+        const openvdb::math::Transform&, const std::vector<Vec3s>&, \
+        const std::vector<Vec3I>&, const std::vector<Vec4I>&, float)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr createLevelSetBox<Grid<TreeT>>(const math::BBox<Vec3s>&, \
+        const openvdb::math::Transform&, float)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    Grid<TreeT>::Ptr createLevelSetBox<Grid<TreeT>>(const math::BBox<Vec3d>&, \
+        const openvdb::math::Transform&, double)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#define _FUNCTION(TreeT) \
+    void traceExteriorBoundaries(TreeT&)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
 
 
 } // namespace tools

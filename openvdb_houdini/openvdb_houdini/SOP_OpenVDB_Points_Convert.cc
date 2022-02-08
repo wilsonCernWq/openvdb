@@ -447,7 +447,7 @@ Unit Vector:\n\
 @overview\n\
 \n\
 This node converts an unstructured cloud of points to and from a single\n\
-[VDB Points|http://www.openvdb.org/documentation/doxygen/points.html] primitive.\n\
+[VDB Points|https://academysoftwarefoundation.github.io/openvdb/points.html] primitive.\n\
 The resulting primitive will reorder the points to place spatially\n\
 close points close together.\n\
 It is then able to efficiently unpack regions of interest within that primitive.\n\
@@ -579,7 +579,7 @@ OP_ERROR
 SOP_OpenVDB_Points_Convert::Cache::cookVDBSop(OP_Context& context)
 {
     try {
-        hvdb::Interrupter boss{"Converting points"};
+        hvdb::HoudiniInterrupter boss{"Converting points"};
 
         hvdb::WarnFunc warnFunction = [this](const std::string& msg) {
             this->addWarning(SOP_MESSAGE, msg.c_str());
@@ -856,7 +856,7 @@ SOP_OpenVDB_Points_Convert::Cache::cookVDBSop(OP_Context& context)
             const int pointsPerVoxel = static_cast<int>(evalInt("pointspervoxel", 0, time));
             const float voxelSize =
                 hvdb::computeVoxelSizeFromHoudini(*detail, pointsPerVoxel,
-                    matrix, /*rounding*/ 5, boss);
+                    matrix, /*rounding*/ 5, boss.interrupter());
 
             matrix.preScale(Vec3d(voxelSize) / math::getScale(matrix));
             transform = Transform::createLinearTransform(matrix);

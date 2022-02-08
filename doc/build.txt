@@ -8,6 +8,7 @@
   - @ref buildDependencies
   - @ref buildMixingDepInstalls
   - @ref buildBloscSupport
+  - @ref buildZLibSupport
   - @ref buildVCPKG
 - @ref buildComponents
 - @ref buildGuide
@@ -83,12 +84,12 @@ given FindModule e.g. `FindBlosc.cmake`:
   path on first runs of CMake (i.e. these variables are not
   [cached](https://cmake.org/cmake/help/latest/command/set.html#set-cache-entry)).
   They are listed in priority order. Note that the prefix is always capitalized.
-   - @b XXX_INCLUDEDIR / @b XXX_LIBRARYDIR - Preferred include and library
-   directories
    - @b Xxx_ROOT - Preferred installation prefix. The given dependency is
    expected to follow a folder structure `Xxx_ROOT/include` and `Xxx_ROOT/lib`
    exist. Note that unlike the above, this is the case matching name of the
    find package .i.e. Blosc_ROOT, IlmBase_ROOT, TBB_ROOT etc.
+   - @b XXX_INCLUDEDIR / @b XXX_LIBRARYDIR - Preferred include and library
+   directories
    - @b SYSTEM_LIBRARY_PATHS - A list of paths appended to all include and lib
    searches.
    - @b XXX_USE_STATIC_LIBS - Only search for static libraries for the given
@@ -106,8 +107,10 @@ given FindModule e.g. `FindBlosc.cmake`:
     - @b Xxx_FOUND - True if the headers and library was found and exists
     - @b Xxx_VERSION - The library version
     - @b Xxx_INCLUDE_DIRS - A list of paths to all required include directories
-    - @b Xxx_LIBRARY_DIRS - A list of paths to all required library directories
-    - @b Xxx_LIBRARIES - A list of libraries needed to use Xxx
+    - @b Xxx_RELEASSE_LIBRARY_DIRS - A list of paths to all required release library directories
+    - @b Xxx_DEBUG_LIBRARY_DIRS - A list of paths to all required debug library directories
+    - @b Xxx_RELEASE_LIBRARIES - A list of libraries needed to use the release version of Xxx
+    - @b Xxx_DEBUG_LIBRARIES - A list of libraries needed to use the debug version of Xxx
   - Each module produces an [imported target](https://cmake.org/cmake/help/latest/command/add_library.html#imported-libraries)
   in the form @b Xxx::xxx, and may generate multiple imported targets if multiple
   components are found.
@@ -142,16 +145,24 @@ provide direct include/lib paths to isolated software locations.
 
 @subsection buildBloscSupport Blosc Support
 
-Blosc is one of the optional dependencies of all OpenVDB components. It is the
-only dependency which is enabled by default. The documented build steps below
-treat blosc as a required dependency. There are two reasons for this:
+Blosc is an optional dependency of all OpenVDB components. The documented
+build steps below treat blosc as a required dependency. There are two reasons
+for this:
 
  - Blosc produces significantly smaller `.vdb` files
  - If Blosc is disabled, you will not be able to read or use any `.vdb` files
    that were created using blosc compression. This includes OpenVDB files from
    Houdini.
 
-You can disable Blosc using `-D USE_BLOSC=OFF`.
+See the note in the [known issues list](@ref depKnownIssues) regarding supported
+versions of blosc.
+
+@subsection buildZLibSupport ZLIB Support
+
+ZLIB is an optional dependency of all OpenVDB components. The documented build
+steps below treat ZLib as a required dependency.
+
+You can disable ZLib using `-D USE_ZLIB=OFF` if Blosc is also disabled using `-D USE_BLOSC=OFF`.
 
 @subsection buildVCPKG Building Dependencies using VCPKG
 
@@ -165,18 +176,28 @@ The following table lists all targets (mainly library and binary components)
 which can be built through the CMake build system. They can be set when using
 CMake from the command line with `-D VAR=ON/OFF` or with a CMake gui:
 
-Component               | Description                                                            | CMake Variable                                    | Default    |
------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
-OpenVDB Core Library    | The Core OpenVDB shared/static library                                 | OPENVDB_BUILD_CORE                                | ON         |
-OpenVDB Print           | Command line binary for displaying information about OpenVDB files     | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_PRINT  | ON / ON    |
-OpenVDB LOD             | Command line binary for generating volume mipmaps from an OpenVDB grid | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_LOD    | ON / OFF   |
-OpenVDB Render          | Command line binary for ray-tracing OpenVDB grids                      | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_RENDER | ON / OFF   |
-OpenVDB View            | Command line binary for displaying OpenVDB grids in a GL viewport      | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_VIEW   | ON / OFF   |
-OpenVDB Python          | Python module for OpenVDB C++ Python bindings                          | OPENVDB_BUILD_PYTHON_MODULE                       | OFF        |
-OpenVDB UnitTests       | OpenVDB's Unit Test suite                                              | OPENVDB_BUILD_UNITTESTS                           | OFF        |
-OpenVDB Houdini Plugin  | The OpenVDB Houdini shared library and OpenVDB Nodes                   | OPENVDB_BUILD_HOUDINI_PLUGIN                      | OFF        |
-OpenVDB Maya Plugin     | The Maya OpenVDB Nodes                                                 | OPENVDB_BUILD_MAYA_PLUGIN                         | OFF        |
-Documentation           | The OpenVDB doxygen documentation                                      | OPENVDB_BUILD_DOCS                                | OFF        |
+Component                 | Description                                                            | CMake Variable                                    | Default    |
+------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------- | ---------- |
+OpenVDB Core Library      | The Core OpenVDB shared/static library                                 | OPENVDB_BUILD_CORE                                | ON         |
+OpenVDB Print             | Command line binary for displaying information about OpenVDB files     | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_PRINT  | ON / ON    |
+OpenVDB LOD               | Command line binary for generating volume mipmaps from an OpenVDB grid | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_LOD    | ON / OFF   |
+OpenVDB Render            | Command line binary for ray-tracing OpenVDB grids                      | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_RENDER | ON / OFF   |
+OpenVDB View              | Command line binary for displaying OpenVDB grids in a GL viewport      | OPENVDB_BUILD_BINARIES / OPENVDB_BUILD_VDB_VIEW   | ON / OFF   |
+OpenVDB Python            | Python module for OpenVDB C++ Python bindings                          | OPENVDB_BUILD_PYTHON_MODULE                       | OFF        |
+OpenVDB UnitTests         | OpenVDB's Unit Test suite                                              | OPENVDB_BUILD_UNITTESTS                           | OFF        |
+OpenVDB Houdini Plugin    | The OpenVDB Houdini shared library and OpenVDB Nodes                   | OPENVDB_BUILD_HOUDINI_PLUGIN                      | OFF        |
+OpenVDB Maya Plugin       | The Maya OpenVDB Nodes                                                 | OPENVDB_BUILD_MAYA_PLUGIN                         | OFF        |
+OpenVDB AX Library        | The OpenVDB AX library                                                 | OPENVDB_BUILD_AX                                  | OFF        |
+OpenVDB AX Binary         | Command line binary for running OpenVDB AX code                        | OPENVDB_BUILD_AX_BINARIES                         | OFF        |
+OpenVDB AX Grammar        | Allows for re-generation of AX grammar, typically not required         | OPENVDB_BUILD_AX_GRAMMAR                          | OFF        |
+OpenVDB AX Unit Tests     | OpenVDB AX's Unit Test suite                                           | OPENVDB_BUILD_AX_UNITTESTS                        | OFF        |
+NanoVDB                   | NanoVDB headers                                                        | OPENVDB_BUILD_NANOVDB                             | OFF        |
+NanoVDB Tools             | NanoVDB command line tools                                             | NANOVDB_BUILD_TOOLS                               | OFF        |
+NanoVDB Examples          | NanoVDB example binaries and benchmarks                                | NANOVDB_BUILD_EXAMPLES / NANOVDB_BUILD_BENCHMARK  | OFF / OFF  |
+NanoVDB Unit Tests        | NanoVDB Unit Test suite                                                | NANOVDB_BUILD_UNITTESTS                           | OFF        |
+Documentation             | The OpenVDB doxygen documentation                                      | OPENVDB_BUILD_DOCS                                | OFF        |
+
+
 
 @section buildGuide Building With CMake
 
@@ -203,8 +224,9 @@ Developers may wish to build a standalone version of OpenVDB to take advantage
 of newer dependencies and newer library features. See
 [here](@ref buildBuildStandalone) for more information.
 
-@b Note: Blosc is treated as a required dependency in these install instructions.
-See the [blosc support](@ref buildBloscSupport) section for more information.
+@b Note: Blosc and ZLib are treated as required dependencies in these install
+instructions. See the [blosc support](@ref buildBloscSupport) and
+[zlib support](@ref buildZLibSupport) sections for more information.
 
 @subsection buildBuildHouMaya Building Against Houdini/Maya
 
@@ -216,9 +238,9 @@ it's a good idea to read the above section on
 
 DCC      | Supported Version | OpenVDB ABI |
 -------- | ----------------- | ----------- |
-Houdini  | 17.0              | 5           |
-Houdini  | 17.5              | 5           |
 Houdini  | 18.0              | 6           |
+Houdini  | 18.5              | 7           |
+Houdini  | 19.0              | 8           |
 Maya     | 2017              | Any         |
 Maya     | 2018              | Any         |
 Maya     | 2019              | Any         |
@@ -237,17 +259,19 @@ Package        | Description                                                    
 -------------- | --------------------------------------------------------------- | ------------------ |
 CMake          | Cross-platform family of tools designed to help build software  | All                |
 C++14 Compiler | Matching Houdini compiler and version                           | All                |
-Boost          | Components: system, iostreams, python, thread                   | All                |
-CppUnit        | A unit testing framework module for C++                         | Unit Tests         |
+Boost          | Components: iostreams, python, thread                           | All                |
+GoogleTest     | A unit testing framework module for C++                         | Unit Tests         |
+CppUnit        | A unit testing framework module for C++                         | Unit Tests (AX)    |
 GLFW           | Simple API for OpenGL development                               | OpenVDB View       |
 Doxygen        | Documentation generation from C++                               | Documentation      |
 Log4cplus      | An optional dependency for improved OpenVDB Logging             | Optional (All)     |
 NumPy          | Scientific computing with Python                                | Optional (Python)  |
+LLVM           | Target-independent code generation                              | OpenVDB AX         |
 
 At a minimum, boost, a matching C++14 compiler and CMake will be required. See
 the full [dependency list](@ref dependencies) for help with downloading and
-installing the above software. Note that as Blosc is provided as part of the
-Houdini installation `USE_BLOSC` should be left `ON`.
+installing the above software. Note that as Blosc and ZLib are provided as part
+of the Houdini installation `USE_BLOSC` and `USE_ZLIB` should be left `ON`.
 
 With the necessary dependencies installed, create and enter a directory for
 cmake to write to. It's generally useful to create this in the location you've
@@ -293,16 +317,23 @@ cmake -D BOOST_ROOT=/path/to/boost/install \
       ../
 @endcode
 
-After the CMake build files have been successfully generated, run make within
-the build directory to compile the project, where the value of the `j` argument
-is the number of CPU threads to use for a multi-threaded build.
+After the CMake build files have been successfully generated, run the build
+tool within the build directory to compile the project. On UNIX, you can
+typically incoke `make` directly:
 @code
 make -j4
 @endcode
 
+Where the value of the `j` argument is the number of CPU threads to use for a
+multi-threaded build. On Windows, you can leverage CMake's build tool to invoke
+the selected builder (usually msbuild):
+@code
+cmake --build .
+@endcode
+
 Finally, once a successful build has completed, you can install all files.
 @code
-make install
+cmake --build . --target install   # or simply `make install`
 @endcode
 
 See the [troubleshooting](@ref buildTroubleshooting) section for help with
@@ -317,22 +348,25 @@ Package        | Description                                                    
 -------------- | ---------------------------------------------------------------   | -------------------------------- |
 CMake          | Cross-platform family of tools designed to help build software    | All                              |
 C++14 Compiler | Matching Houdini compiler and version                             | All                              |
-Boost          | Components: system, iostreams, python, thread                     | All                              |
-IlmBase        | Used half precision floating points and EXR serialization support | All                              |
+Boost          | Components: iostreams, python, thread                             | All                              |
 ZLIB           | Compression library for disk serialization compression            | All                              |
 Blosc          | Recommended dependency for improved disk compression              | All*                             |
-CppUnit        | A unit testing framework module for C++                           | Unit Tests                       |
+GoogleTest     | A unit testing framework module for C++                           | Unit Tests                       |
+CppUnit        | A unit testing framework module for C++                           | Unit Tests (AX)                  |
 GLFW           | Simple API for OpenGL development                                 | OpenVDB View                     |
 Doxygen        | Documentation generation from C++                                 | Documentation                    |
-OpenEXR        | EXR serialization support                                         | Optional (Core) / OpenVDB Render |
+OpenEXR        | EXR serialization support                                         | OpenVDB Render                   |
+IlmBase        | Used half precision floating points and EXR serialization support | Optional (All)                   |
 Log4cplus      | An optional dependency for improved OpenVDB Logging               | Optional (All)                   |
 NumPy          | Scientific computing with Python                                  | Optional (Python)                |
+LLVM           | Target-independent code generation                                | OpenVDB AX                       |
+
 
 * See [blosc support](@ref buildBloscSupport)
 
-At a minimum, boost, a matching C++14 compiler, IlmBase, ZLIB, blosc and CMake
-will be required. See the full [dependency list](@ref dependencies) for help
-with downloading and installing the above software.
+At a minimum, boost, a matching C++14 compiler, ZLIB, blosc and CMake will be
+required. See the full [dependency list](@ref dependencies) for help with
+downloading and installing the above software.
 
 With the necessary dependencies installed, create and enter a directory for
 cmake to write to. It's generally useful to create this in the location you've
@@ -378,16 +412,23 @@ As the Maya plugin is disabled by default, you may also want to add
 [components](@ref buildComponents) section shows which targets are enabled by
 default.
 
-After the CMake build files have been successfully generated, run make within
-the build directory to compile the project, where the value of the `j` argument
-is the number of CPU threads to use for a multi-threaded build.
+After the CMake build files have been successfully generated, run the build
+tool within the build directory to compile the project. On UNIX, you can
+typically incoke `make` directly:
 @code
 make -j4
 @endcode
 
+Where the value of the `j` argument is the number of CPU threads to use for a
+multi-threaded build. On Windows, you can leverage CMake's build tool to invoke
+the selected builder (usually msbuild):
+@code
+cmake --build .
+@endcode
+
 Finally, once a successful build has completed, you can install all files.
 @code
-make install
+cmake --build . --target install   # or simply `make install`
 @endcode
 
 @b Note: The Maya OpenVDB Visualize Node is @b only compatible with Legacy
@@ -433,16 +474,23 @@ cmake -D CMAKE_INSTALL_PREFIX=$HOME/openvdb ../
 See the [components](@ref buildComponents) section to find which targets are
 available, their corresponding CMake flags and their default values.
 
-After the CMake build files have been successfully generated, run make within
-the build directory to compile the project, where the value of the `j` argument
-is the number of CPU threads to use for a multi-threaded build.
+After the CMake build files have been successfully generated, run the build
+tool within the build directory to compile the project. On UNIX, you can
+typically incoke `make` directly:
 @code
 make -j4
 @endcode
 
+Where the value of the `j` argument is the number of CPU threads to use for a
+multi-threaded build. On Windows, you can leverage CMake's build tool to invoke
+the selected builder (usually msbuild):
+@code
+cmake --build .
+@endcode
+
 Finally, once a successful build has completed, you can install all files.
 @code
-make install
+cmake --build . --target install   # or simply `make install`
 @endcode
 
 See the [troubleshooting](@ref buildTroubleshooting) section for help with
@@ -468,7 +516,7 @@ You can add the below CMake snippet to your main `CMakeLists.txt` to bring in
 OpenVDB as a dependency:
 
 @code{.cmake}
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 list(APPEND CMAKE_MODULE_PATH "/location/of/openvdb/install/lib/cmake/OpenVDB")
 find_package(OpenVDB REQUIRED)
 target_link_libraries(myapp OpenVDB::openvdb)
@@ -490,7 +538,8 @@ troubleshooting for more information.
 @section buildTroubleshooting Troubleshooting
 
 If after reading this guide you're unable to find your specific issue below,
-please get in touch with the OpenVDB TSC.
+please get in touch or [file an issue](https://github.com/AcademySoftwareFoundation/openvdb/issues)
+with the OpenVDB TSC.
 
 @b Note: If running into issues when changing CMake settings/dependency paths,
 try clearing the designated CMake build directory and running your `cmake`
@@ -560,15 +609,66 @@ OpenVDB uses [imported targets](https://cmake.org/cmake/help/latest/command/add_
 for all its dependencies. For imported Boost compatibility, the following
 versions of CMake are required:
 
-  - Boost 1.63 requires CMake 3.7 or newer.
-  - Boost 1.64 requires CMake 3.8 or newer.
-  - Boost 1.65 and 1.65.1 require CMake 3.9.3 or newer.
-  - Boost 1.66 requires CMake 3.11 or newer.
-  - Boost 1.67 requires CMake 3.12 or newer.
   - Boost 1.68, 1.69 require CMake 3.13 or newer.
   - Boost 1.70 requires CMake 3.14 or newer.
 
 Use the above list to identify the version of CMake you require for your version
 of Boost. Note that this may be implemented into the OpenVDB CMake in the future.
+
+@subsection troubleshoot4 Detected VCPKG toolchain is using a mismatching triplet for OpenVDB build artifacts
+
+If you are on Windows and using vcpkg, builds of OpenVDB should usually only
+build the static OR shared library depending on your vcpkg triplet. This is
+related to how libraries link against the Windows CRT. In vcpkg, static triplets,
+such as @b x64-windows-static, will use the @b MultiThreaded (/MT) flag and
+dynamic triplets, such as @b x64-windows, will use the @b MultiThreadedDLL (/MD)
+flag. These flags @b must match throughout all software artifacts in your
+toolchain (regardless if you are using vcpkg or not).
+
+This warning is shown when OpenVDB detects you using either a dynamic or static
+VCPKG toolchain on Windows, but have the opposite core library variant enabled.
+By default, the static build of OpenVDB links against the @b MultiThreaded
+(/MT) CRT and the dynamic library links against the  @b MultiThreadedDLL (/MD)
+CRT. As OpenVDB configures both by default, it is typical that you may want
+to disable one or the other depending on your needs.
+
+Note that you can provide a value for `CMAKE_MSVC_RUNTIME_LIBRARY` which is a
+native CMake variable to override any CRT selection done by OpenVDB.
+
+For more information, see the following articles:
+Description of CRT selection: https://docs.microsoft.com/en-us/cpp/build/reference/md-mt-ld-use-run-time-library
+In depth descriptopn of the CRT on Windows: https://docs.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features
+Related errors: https://docs.microsoft.com/en-us/cpp/error-messages/tool-errors/linker-tools-error-lnk2038
+`CMAKE_MSVC_RUNTIME_LIBRARY` docs: https://cmake.org/cmake/help/latest/variable/CMAKE_MSVC_RUNTIME_LIBRARY.html
+
+@subsection troubleshoot5 Unexpected value for the Windows CRT with target build artifacts.
+
+On Windows, it is typical for static builds to link to static libraries and
+dynamic builds to link to dynamic library variants. This is not related to the
+libraries themselves, rather it is due to the way that all libraries used within
+a specific toolchain must use the same version of the CRT. The rule of thumb is
+to configure static builds against the static CRT and dynamic builds against
+the dynamic CRT.
+
+This warning is shown if you have provided a value for the CMake variable
+`CMAKE_MSVC_RUNTIME_LIBRARY`, but this value is the opposite of what's expected
+for a target library.
+
+Note that there are some cases where it makes sense to link static builds of
+OpenVDB against the dynamic (/MD) CRT. However, unless you are confident in your
+usage, it is strongly encouraged to match the selection against your desired
+build type.
+
+For more information, see the following articles:
+Description of CRT selection: https://docs.microsoft.com/en-us/cpp/build/reference/md-mt-ld-use-run-time-library
+In depth descriptopn of the CRT on Windows: https://docs.microsoft.com/en-us/cpp/c-runtime-library/crt-library-features
+Related errors: https://docs.microsoft.com/en-us/cpp/error-messages/tool-errors/linker-tools-error-lnk2038
+`CMAKE_MSVC_RUNTIME_LIBRARY` docs: https://cmake.org/cmake/help/latest/variable/CMAKE_MSVC_RUNTIME_LIBRARY.html
+
+@subsection troubleshoot6 error LNK2038: mismatch detected for 'RuntimeLibrary'
+
+A build artifact of OpenVDB has been linked against a dependency which uses a
+different version of the Window CRT. See the [above section](@ref troubleshoot5)
+on dealing with CRT selection for static and dynamic library builds on Windows.
 
 */

@@ -1,9 +1,10 @@
 // Copyright Contributors to the OpenVDB Project
 // SPDX-License-Identifier: MPL-2.0
 
-#include <cppunit/extensions/HelperMacros.h>
 #include <openvdb/tools/ParticleAtlas.h>
 #include <openvdb/math/Math.h>
+
+#include <gtest/gtest.h>
 
 #include <vector>
 #include <algorithm>
@@ -11,16 +12,10 @@
 #include "util.h" // for genPoints
 
 
-struct TestParticleAtlas: public CppUnit::TestCase
+struct TestParticleAtlas: public ::testing::Test
 {
-    CPPUNIT_TEST_SUITE(TestParticleAtlas);
-    CPPUNIT_TEST(testParticleAtlas);
-    CPPUNIT_TEST_SUITE_END();
-
-    void testParticleAtlas();
 };
 
-CPPUNIT_TEST_SUITE_REGISTRATION(TestParticleAtlas);
 
 ////////////////////////////////////////
 
@@ -80,8 +75,7 @@ bool hasDuplicates(const std::vector<T>& items)
 ////////////////////////////////////////
 
 
-void
-TestParticleAtlas::testParticleAtlas()
+TEST_F(TestParticleAtlas, testParticleAtlas)
 {
     // generate points
 
@@ -108,33 +102,33 @@ TestParticleAtlas::testParticleAtlas()
 
     ParticleAtlas atlas;
 
-    CPPUNIT_ASSERT(atlas.empty());
-    CPPUNIT_ASSERT(atlas.levels() == 0);
+    EXPECT_TRUE(atlas.empty());
+    EXPECT_TRUE(atlas.levels() == 0);
 
     atlas.construct(particles, minVoxelSize);
 
-    CPPUNIT_ASSERT(!atlas.empty());
-    CPPUNIT_ASSERT(atlas.levels() == 2);
+    EXPECT_TRUE(!atlas.empty());
+    EXPECT_TRUE(atlas.levels() == 2);
 
-    CPPUNIT_ASSERT(
+    EXPECT_TRUE(
         openvdb::math::isApproxEqual(atlas.minRadius(0), minVoxelSize));
 
-    CPPUNIT_ASSERT(
+    EXPECT_TRUE(
         openvdb::math::isApproxEqual(atlas.minRadius(1), minVoxelSize * 2.0));
 
     typedef openvdb::tools::ParticleAtlas<>::Iterator ParticleAtlasIterator;
 
     ParticleAtlasIterator it(atlas);
 
-    CPPUNIT_ASSERT(atlas.levels() == 2);
+    EXPECT_TRUE(atlas.levels() == 2);
 
     std::vector<uint32_t> indices;
     indices.reserve(numParticle);
 
     it.updateFromLevel(0);
 
-    CPPUNIT_ASSERT(it);
-    CPPUNIT_ASSERT_EQUAL(it.size(), numParticle - (points.size() / 2));
+    EXPECT_TRUE(it);
+    EXPECT_EQ(it.size(), numParticle - (points.size() / 2));
 
 
     for (; it; ++it) {
@@ -143,32 +137,32 @@ TestParticleAtlas::testParticleAtlas()
 
     it.updateFromLevel(1);
 
-    CPPUNIT_ASSERT(it);
-    CPPUNIT_ASSERT_EQUAL(it.size(), (points.size() / 2));
+    EXPECT_TRUE(it);
+    EXPECT_EQ(it.size(), (points.size() / 2));
 
 
     for (; it; ++it) {
         indices.push_back(*it);
     }
 
-    CPPUNIT_ASSERT_EQUAL(numParticle, indices.size());
+    EXPECT_EQ(numParticle, indices.size());
 
-    CPPUNIT_ASSERT(!hasDuplicates(indices));
+    EXPECT_TRUE(!hasDuplicates(indices));
 
 
     openvdb::Vec3R center = points[0];
     double searchRadius = minVoxelSize * 10.0;
 
     it.worldSpaceSearchAndUpdate(center, searchRadius, particles);
-    CPPUNIT_ASSERT(it);
+    EXPECT_TRUE(it);
 
     indices.clear();
     for (; it; ++it) {
         indices.push_back(*it);
     }
 
-    CPPUNIT_ASSERT_EQUAL(it.size(), indices.size());
-    CPPUNIT_ASSERT(!hasDuplicates(indices));
+    EXPECT_EQ(it.size(), indices.size());
+    EXPECT_TRUE(!hasDuplicates(indices));
 
 
     openvdb::BBoxd bbox;
@@ -177,14 +171,14 @@ TestParticleAtlas::testParticleAtlas()
     }
 
     it.worldSpaceSearchAndUpdate(bbox, particles);
-    CPPUNIT_ASSERT(it);
+    EXPECT_TRUE(it);
 
     indices.clear();
     for (; it; ++it) {
         indices.push_back(*it);
     }
 
-    CPPUNIT_ASSERT_EQUAL(it.size(), indices.size());
-    CPPUNIT_ASSERT(!hasDuplicates(indices));
+    EXPECT_EQ(it.size(), indices.size());
+    EXPECT_TRUE(!hasDuplicates(indices));
 }
 

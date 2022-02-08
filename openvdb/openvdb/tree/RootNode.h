@@ -405,6 +405,13 @@ public:
     /// Return the bounding box of this RootNode, i.e., an infinite bounding box.
     static CoordBBox getNodeBoundingBox() { return CoordBBox::inf(); }
 
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Return the transient data value.
+    Index32 transientData() const { return mTransientData; }
+    /// Set the transient data value.
+    void setTransientData(Index32 transientData) { mTransientData = transientData; }
+#endif
+
     /// @brief Change inactive tiles or voxels with a value equal to +/- the
     /// old background to the specified value (with the same sign). Active values
     /// are unchanged.
@@ -833,8 +840,11 @@ public:
     /// Specifically, active tiles and voxels in this tree are not changed, and
     /// tiles or voxels that were inactive in this tree but active in the other tree
     /// are marked as active in this tree but left with their original values.
+    ///
+    /// @note If preserveTiles is true, any active tile in this topology
+    /// will not be densified by overlapping child topology.
     template<typename OtherChildType>
-    void topologyUnion(const RootNode<OtherChildType>& other);
+    void topologyUnion(const RootNode<OtherChildType>& other, const bool preserveTiles = false);
 
     /// @brief Intersects this tree's set of active values with the active values
     /// of the other tree, whose @c ValueType may be different.
@@ -903,7 +913,9 @@ private:
     void resetTable(const MapType&) const {}
     //@}
 
+#if OPENVDB_ABI_VERSION_NUMBER < 8
     Index getChildCount() const;
+#endif
     Index getTileCount() const;
     Index getActiveTileCount() const;
     Index getInactiveTileCount() const;
@@ -961,6 +973,10 @@ private:
 
     MapType mTable;
     ValueType mBackground;
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    /// Transient Data (not serialized)
+    Index32 mTransientData = 0;
+#endif
 }; // end of RootNode class
 
 
@@ -1041,8 +1057,11 @@ template<typename ChildT>
 template<typename OtherChildType>
 inline
 RootNode<ChildT>::RootNode(const RootNode<OtherChildType>& other,
-    const ValueType& backgd, const ValueType& foregd, TopologyCopy):
-    mBackground(backgd)
+    const ValueType& backgd, const ValueType& foregd, TopologyCopy)
+    : mBackground(backgd)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     using OtherRootT = RootNode<OtherChildType>;
 
@@ -1063,8 +1082,11 @@ template<typename ChildT>
 template<typename OtherChildType>
 inline
 RootNode<ChildT>::RootNode(const RootNode<OtherChildType>& other,
-    const ValueType& backgd, TopologyCopy):
-    mBackground(backgd)
+    const ValueType& backgd, TopologyCopy)
+    : mBackground(backgd)
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+    , mTransientData(other.mTransientData)
+#endif
 {
     using OtherRootT = RootNode<OtherChildType>;
 
@@ -1123,6 +1145,9 @@ struct RootNodeCopyHelper<RootT, OtherRootT, /*Compatible=*/true>
         };
 
         self.mBackground = Local::convertValue(other.mBackground);
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+        self.mTransientData = other.mTransientData;
+#endif
 
         self.clear();
         self.initTable();
@@ -1149,6 +1174,9 @@ RootNode<ChildT>::operator=(const RootNode& other)
 {
     if (&other != this) {
         mBackground = other.mBackground;
+#if OPENVDB_ABI_VERSION_NUMBER >= 9
+        mTransientData = other.mTransientData;
+#endif
 
         this->clear();
         this->initTable();
@@ -1474,15 +1502,13 @@ RootNode<ChildT>::evalActiveBoundingBox(CoordBBox& bbox, bool visitVoxels) const
 }
 
 
+#if OPENVDB_ABI_VERSION_NUMBER < 8
 template<typename ChildT>
 inline Index
 RootNode<ChildT>::getChildCount() const {
-    Index sum = 0;
-    for (MapCIter i = mTable.begin(), e = mTable.end(); i != e; ++i) {
-        if (isChild(i)) ++sum;
-    }
-    return sum;
+    return this->childCount();
 }
+#endif
 
 
 template<typename ChildT>
@@ -1551,7 +1577,11 @@ template<typename ChildT>
 inline Index32
 RootNode<ChildT>::childCount() const
 {
-    return this->getChildCount();
+    Index sum = 0;
+    for (MapCIter i = mTable.begin(), e = mTable.end(); i != e; ++i) {
+        if (isChild(i)) ++sum;
+    }
+    return sum;
 }
 
 
@@ -2265,7 +2295,7 @@ RootNode<ChildT>::writeTopology(std::ostream& os, bool toHalf) const
     }
     io::setGridBackgroundValuePtr(os, &mBackground);
 
-    const Index numTiles = this->getTileCount(), numChildren = this->getChildCount();
+    const Index numTiles = this->getTileCount(), numChildren = this->childCount();
     os.write(reinterpret_cast<const char*>(&numTiles), sizeof(Index));
     os.write(reinterpret_cast<const char*>(&numChildren), sizeof(Index));
 
@@ -3058,7 +3088,7 @@ RootNode<ChildT>::merge(RootNode& other)
 template<typename ChildT>
 template<typename OtherChildType>
 inline void
-RootNode<ChildT>::topologyUnion(const RootNode<OtherChildType>& other)
+RootNode<ChildT>::topologyUnion(const RootNode<OtherChildType>& other, const bool preserveTiles)
 {
     using OtherRootT = RootNode<OtherChildType>;
     using OtherCIterT = typename OtherRootT::MapCIter;
@@ -3072,12 +3102,14 @@ RootNode<ChildT>::topologyUnion(const RootNode<OtherChildType>& other)
                 mTable[i->first] = NodeStruct(
                     *(new ChildT(other.getChild(i), mBackground, TopologyCopy())));
             } else if (this->isChild(j)) { // union with child branch
-                this->getChild(j).topologyUnion(other.getChild(i));
+                this->getChild(j).topologyUnion(other.getChild(i), preserveTiles);
             } else {// this is a tile so replace it with a child branch with identical topology
-                ChildT* child = new ChildT(
-                    other.getChild(i), this->getTile(j).value, TopologyCopy());
-                if (this->isTileOn(j)) child->setValuesOn();//this is an active tile
-                this->setChild(j, *child);
+                if (!preserveTiles || this->isTileOff(j)) { // force child topology
+                    ChildT* child = new ChildT(
+                        other.getChild(i), this->getTile(j).value, TopologyCopy());
+                    if (this->isTileOn(j)) child->setValuesOn();//this is an active tile
+                    this->setChild(j, *child);
+                }
             }
         } else if (other.isTileOn(i)) { // other is an active tile
             if (j == mTable.end()) { // insert an active tile

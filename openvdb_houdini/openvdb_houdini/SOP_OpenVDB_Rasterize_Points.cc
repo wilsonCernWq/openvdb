@@ -20,6 +20,7 @@
 #include <openvdb/tools/GridTransformer.h>
 #include <openvdb/tools/PointIndexGrid.h>
 #include <openvdb/tools/Prune.h>
+#include <openvdb/thread/Threading.h>
 
 #include <CH/CH_Manager.h>
 #include <CVEX/CVEX_Context.h>
@@ -47,7 +48,6 @@
 #include <VOP/VOP_ExportedParmsManager.h>
 #include <VOP/VOP_LanguageContextTypeList.h>
 
-#include <tbb/atomic.h>
 #include <tbb/blocked_range.h>
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/parallel_for.h>
@@ -59,6 +59,7 @@
 #include <hboost/algorithm/string/split.hpp>
 
 #include <algorithm> // std::sort
+#include <atomic>
 #include <cmath> // trigonometric functions
 #include <memory>
 #include <set>
@@ -231,8 +232,8 @@ bboxClip(MaskTreeType& mask, const openvdb::BBoxd& bbox, bool invertMask,
         MaskGridType dstClipMask(offVal);
         dstClipMask.setTransform(maskXform.copy());
 
-        hvdb::Interrupter interrupter;
-        openvdb::tools::resampleToMatch<BoolSampler>(srcClipMask, dstClipMask, interrupter);
+        hvdb::HoudiniInterrupter interrupter;
+        openvdb::tools::resampleToMatch<BoolSampler>(srcClipMask, dstClipMask, interrupter.interrupter());
 
         if (invertMask) {
             mask.topologyDifference(dstClipMask.tree());
@@ -268,8 +269,8 @@ struct GridTopologyClipOp
         MaskGridType dstClipMask(offVal);
         dstClipMask.setTransform(mMaskXform->copy());
 
-        hvdb::Interrupter interrupter;
-        openvdb::tools::resampleToMatch<BoolSampler>(srcClipMask, dstClipMask, interrupter);
+        hvdb::HoudiniInterrupter interrupter;
+        openvdb::tools::resampleToMatch<BoolSampler>(srcClipMask, dstClipMask, interrupter.interrupter());
 
         if (mInvertMask) {
             mMask->topologyDifference(dstClipMask.tree());
@@ -607,7 +608,7 @@ struct PointIndexGridCollection
 
     PointIndexGridCollection(const GU_Detail& detail, const float radiusScale,
         const float minVoxelSize, const GA_PointGroup* group = nullptr,
-        hvdb::Interrupter* interrupter = nullptr)
+        openvdb::util::NullInterrupter* interrupter = nullptr)
         : mPointCacheArray() , mIdxGridArray(), mMinRadiusArray(), mMaxRadiusArray()
     {
         mPointCacheArray.push_back(PointCache::Ptr(new PointCache(detail, radiusScale, group)));
@@ -745,7 +746,7 @@ struct ConstructCandidateVoxelMask
         const std::vector<const PointIndexLeafNode*>& pointIndexLeafNodes,
         const openvdb::math::Transform& xform,
         const openvdb::CoordBBox * clipBox = nullptr,
-        hvdb::Interrupter* interrupter = nullptr)
+        openvdb::util::NullInterrupter* interrupter = nullptr)
         : mMaskTree(false)
         , mMaskTreePt(&maskTree)
         , mMaskAccessor(*mMaskTreePt)
@@ -786,7 +787,7 @@ struct ConstructCandidateVoxelMask
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
 
             if (this->wasInterrupted()) {
-                tbb::task::self().cancel_group_execution();
+                openvdb::thread::cancelGroupExecution();
                 break;
             }
 
@@ -1087,7 +1088,7 @@ private:
     PointIndexLeafNode          const * const * const mPointIndexNodes;
     openvdb::math::Transform                    const mXform;
     openvdb::CoordBBox                  const * const mClipBox;
-    hvdb::Interrupter                         * const mInterrupter;
+    openvdb::util::NullInterrupter            * const mInterrupter;
 }; // struct ConstructCandidateVoxelMask
 
 
@@ -1187,7 +1188,7 @@ maskRegionOfInterest(PointIndexGridCollection::BoolTreeType& mask,
     const PointIndexGridCollection& idxGridCollection,
     const openvdb::math::Transform& volumeTransform,
     bool clipToFrustum = false,
-    hvdb::Interrupter* interrupter = nullptr)
+    openvdb::util::NullInterrupter* interrupter = nullptr)
 {
     using BoolLeafNodeType = PointIndexGridCollection::BoolTreeType::LeafNodeType;
 
@@ -1623,9 +1624,9 @@ struct Attribute
         typename GridType::Ptr frustumGrid = GridType::create();
         frustumGrid->setTransform(mTransform.copy());
 
-        hvdb::Interrupter interrupter;
+        hvdb::HoudiniInterrupter interrupter;
         openvdb::tools::resampleToMatch<openvdb::tools::BoxSampler>(
-            *grid, *frustumGrid, interrupter);
+            *grid, *frustumGrid, interrupter.interrupter());
 
         TreeType& frustumTree = frustumGrid->tree();
 
@@ -1954,7 +1955,7 @@ private:
     UT_WorkArgs mVexArgs;
     const size_t mMaxArraySize;
     fpreal mTime, mTimeInc, mFrame;
-    tbb::atomic<int> mIsTimeDependant;
+    std::atomic<int> mIsTimeDependant;
     GU_VexGeoInputs mVexInputs;
 };
 
@@ -1991,7 +1992,7 @@ struct RasterizePoints
         DensityTreatment treatment,
         const float densityScale = 1.0,
         const float solidRatio = 0.0,
-        hvdb::Interrupter* interrupter = nullptr)
+        openvdb::util::NullInterrupter* interrupter = nullptr)
         : mDetail(&detail)
         , mIdxGridCollection(&idxGridCollection)
         , mRegionMaskNodes(&regionMaskLeafNodes.front())
@@ -2092,7 +2093,7 @@ struct RasterizePoints
         for (size_t n = range.begin(), N = range.end(); n != N; ++n) {
 
             if (this->wasInterrupted()) {
-                tbb::task::self().cancel_group_execution();
+                openvdb::thread::cancelGroupExecution();
                 break;
             }
 
@@ -2203,7 +2204,7 @@ private:
         const double dxSqr = dx * dx;
 
         openvdb::Coord ijk, pMin, pMax;
-        PosType center, xyz;
+        PosType xyz;
 
         for (; pointIndexIter; ++pointIndexIter) {
 
@@ -2471,7 +2472,7 @@ private:
     GU_Detail                   const * const mDetail;
     PointIndexGridCollection    const * const mIdxGridCollection;
     BoolLeafNodeType    const * const * const mRegionMaskNodes;
-    hvdb::Interrupter                 * const mInterrupter;
+    openvdb::util::NullInterrupter    * const mInterrupter;
     DensityAttribute                  *       mDensityAttribute;
     std::vector<Vec3sAttribute::Ptr>  *       mVectorAttributes;
     std::vector<FloatAttribute::Ptr>  *       mFloatAttributes;
@@ -2489,7 +2490,7 @@ private:
 /// Collection of rasterization settings
 struct RasterizationSettings
 {
-    RasterizationSettings(const GU_Detail& geo, const GA_PointGroup* group, hvdb::Interrupter& in)
+    RasterizationSettings(const GU_Detail& geo, const GA_PointGroup* group, openvdb::util::NullInterrupter& in)
         : createDensity(true)
         , clipToFrustum(true)
         , invertMask(false)
@@ -2527,7 +2528,7 @@ struct RasterizationSettings
     openvdb::math::Transform::Ptr             transform;
     GU_Detail                   const * const pointsGeo;
     GA_PointGroup               const * const pointGroup;
-    hvdb::Interrupter                 * const interrupter;
+    openvdb::util::NullInterrupter    * const interrupter;
     VEXContext                        *       vexContext;
     std::vector<std::string>                  scalarAttributeNames;
     std::vector<std::string>                  vectorAttributeNames;
@@ -3292,7 +3293,7 @@ SOP_OpenVDB_Rasterize_Points::cookVDBSop(OP_Context& context)
         if (exportPointMask || createDensity || !scalarAttribNames.empty()
             || !vectorAttribNames.empty())
         {
-            hvdb::Interrupter boss("Rasterizing points");
+            hvdb::HoudiniInterrupter boss("Rasterizing points");
 
             // Set rasterization settings
 
@@ -3313,7 +3314,7 @@ SOP_OpenVDB_Rasterize_Points::cookVDBSop(OP_Context& context)
             }
 
 
-            RasterizationSettings settings(*pointsGeo, pointGroup, boss);
+            RasterizationSettings settings(*pointsGeo, pointGroup, boss.interrupter());
 
             settings.createDensity = createDensity;
             settings.exportPointMask = exportPointMask;

@@ -7,18 +7,20 @@
 
 #]=======================================================================]
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 project(OpenVDBCore LANGUAGES CXX)
 
-# Monitoring <PackageName>_ROOT variables
-if(POLICY CMP0074)
-  cmake_policy(SET CMP0074 NEW)
-endif()
+include(GNUInstallDirs)
 
 ###### OpenVDB Core Options
 
 option(OPENVDB_CORE_SHARED "Build dynamically linked version of the core library." ON)
 option(OPENVDB_CORE_STATIC "Build statically linked version of the core library." ON)
+
+if(NOT OPENVDB_NAMESPACE_SUFFIX)
+  set(OPENVDB_NAMESPACE_SUFFIX "" CACHE STRING
+    "An optional custom string to append to the OpenVDB namespace. This is used to configure version.h.")
+endif()
 
 set(OPENVDB_SHARED_LIBRARY_NAME "openvdb" CACHE STRING
   "The base name of the built shared openvdb library. Prefixed by \"lib\" on UNIX platforms."
@@ -34,8 +36,7 @@ mark_as_advanced(
 
 if(NOT OPENVDB_CORE_SHARED AND NOT OPENVDB_CORE_STATIC)
   message(FATAL_ERROR "Both static and shared core OpenVDB libraries have been disabled. "
-    "At least one must be enabled when building the core library."
-  )
+    "At least one must be enabled when building the core library.")
 endif()
 
 #########################################################################
@@ -46,58 +47,66 @@ message(STATUS "----------------------------------------------------")
 
 ##########################################################################
 
-# Collect and configure lib dependencies
+# Win32 checks - we don't set any explicit settings so allow for all build
+# types, but warn in cases where they probably have not been intended
 
-if(USE_EXR)
-  find_package(IlmBase ${MINIMUM_ILMBASE_VERSION} REQUIRED)
-  find_package(OpenEXR ${MINIMUM_OPENEXR_VERSION} REQUIRED)
-  if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_OPENEXR_VERSION)
-    if(${OpenEXR_VERSION} VERSION_LESS FUTURE_MINIMUM_OPENEXR_VERSION)
-      message(DEPRECATION "Support for OpenEXR versions < ${FUTURE_MINIMUM_OPENEXR_VERSION} "
-        "is deprecated and will be removed.")
+if(WIN32)
+  if(VCPKG_TOOLCHAIN AND VCPKG_TARGET_TRIPLET)
+    string(FIND ${VCPKG_TARGET_TRIPLET} "static" _BUILDING_STATIC_TRIPLET)
+    if(_BUILDING_STATIC_TRIPLET EQUAL -1)
+      # x64-windows
+      if(OPENVDB_CORE_STATIC)
+        # building the static lib - check to see if we've explicitly set /MD
+        if(NOT CMAKE_MSVC_RUNTIME_LIBRARY OR NOT
+          (CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL MultiThreadedDLL OR
+           CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL MultiThreadedDebugDLL))
+          # /MD not set, /MT will be used
+          message(WARNING "Detected VCPKG toolchain is using a mismatching triplet for "
+            "OpenVDB build artifacts. ${VCPKG_TARGET_TRIPLET} is dynamic, but OPENVDB_CORE_STATIC "
+            "is ON. The static build of OpenVDB may not build correctly. It it recommended to only "
+            "configure either the static or shared library on Windows in a single run of CMake.")
+        endif()
+      endif()
+    else()
+      # x64-windows-static
+      if(OPENVDB_CORE_SHARED)
+        # building the shared lib - check to see if we've explicitly set /MT
+        if(NOT CMAKE_MSVC_RUNTIME_LIBRARY OR NOT
+          (CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL MultiThreaded OR
+           CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL MultiThreadedDebug))
+          # /MT not set, /MD will be used
+          message(WARNING "Detected VCPKG toolchain is using a mismatching triplet for "
+            "OpenVDB build artifacts. ${VCPKG_TARGET_TRIPLET} is static, but OPENVDB_CORE_SHARED "
+            "is ON. The shared build of OpenVDB may not build correctly. It it recommended to only "
+            "configure either the static or shared library on Windows in a single run of CMake.")
+        endif()
+      endif()
     endif()
   endif()
-else()
-  find_package(IlmBase ${MINIMUM_ILMBASE_VERSION} REQUIRED COMPONENTS Half)
-endif()
 
-if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_ILMBASE_VERSION)
-  if(${IlmBase_VERSION} VERSION_LESS FUTURE_MINIMUM_ILMBASE_VERSION)
-    message(DEPRECATION "Support for IlmBase versions < ${FUTURE_MINIMUM_ILMBASE_VERSION} "
-      "is deprecated and will be removed.")
+  if(CMAKE_MSVC_RUNTIME_LIBRARY)
+    if(CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreaded" OR
+       CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreadedDebug")
+      if(OPENVDB_CORE_SHARED)
+         message(WARNING "Unexpected value for the Windows CRT with target build artifacts."
+          "You are attempting to use the static CRT (/MT) with a dynamic configuration of OpenVDB."
+          "This is not recommended and may cause failures.")
+      endif()
+    endif()
+    if(CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreadedDLL" OR
+       CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "MultiThreadedDebugDLL")
+      if(OPENVDB_CORE_STATIC)
+         message(WARNING "Unexpected value for the Windows CRT with target build artifacts."
+          "You are attempting to use the dyanmic CRT (/MD) with a static configuration of OpenVDB."
+          "This is not recommended and may cause failures.")
+      endif()
+    endif()
   endif()
 endif()
 
-find_package(TBB ${MINIMUM_TBB_VERSION} REQUIRED COMPONENTS tbb)
+##########################################################################
 
-if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_TBB_VERSION)
-  if(${Tbb_VERSION} VERSION_LESS FUTURE_MINIMUM_TBB_VERSION)
-    message(DEPRECATION "Support for TBB versions < ${FUTURE_MINIMUM_TBB_VERSION} "
-      "is deprecated and will be removed.")
-  endif()
-endif()
-
-find_package(ZLIB ${MINIMUM_ZLIB_VERSION} REQUIRED)
-
-if(USE_LOG4CPLUS)
-  find_package(Log4cplus ${MINIMUM_LOG4CPLUS_VERSION} REQUIRED)
-endif()
-
-if(USE_BLOSC)
-  find_package(Blosc ${MINIMUM_BLOSC_VERSION} REQUIRED)
-  if(Blosc_FOUND AND Blosc_VERSION VERSION_GREATER MINIMUM_BLOSC_VERSION)
-    message(WARNING "The version of Blosc located is greater than ${MINIMUM_BLOSC_VERSION}. "
-      "There have been reported issues with using later versions of Blosc with OpenVDB. "
-      "OpenVDB has been tested fully against Blosc ${MINIMUM_BLOSC_VERSION}, it is "
-      "recommended that you use this version where possible."
-    )
-  endif()
-else()
-  message(WARNING "Blosc support is disabled. It is strongly recommended to "
-    "enable blosc for optimal builds of OpenVDB and to support compatible "
-    "serialization of other OpenVDB installations."
-  )
-endif()
+# Collect and configure lib dependencies
 
 if(OPENVDB_CORE_SHARED AND NOT Boost_USE_STATIC_LIBS)
   # @note  Both of these must be set for Boost 1.70 (VFX2020) to link against
@@ -108,12 +117,86 @@ if(OPENVDB_CORE_SHARED AND NOT Boost_USE_STATIC_LIBS)
   set(Boost_USE_STATIC_LIBS OFF)
 endif()
 
-find_package(Boost ${MINIMUM_BOOST_VERSION} REQUIRED COMPONENTS iostreams system)
-
+find_package(Boost ${MINIMUM_BOOST_VERSION} REQUIRED COMPONENTS iostreams)
 if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_BOOST_VERSION)
-  if(${Boost_LIB_VERSION} VERSION_LESS FUTURE_MINIMUM_BOOST_VERSION)
+  # The X.Y.Z boost version value isn't available until CMake 3.14
+  set(FULL_BOOST_VERSION "${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION}.${Boost_SUBMINOR_VERSION}")
+  if(${FULL_BOOST_VERSION} VERSION_LESS FUTURE_MINIMUM_BOOST_VERSION)
     message(DEPRECATION "Support for Boost versions < ${FUTURE_MINIMUM_BOOST_VERSION} "
       "is deprecated and will be removed.")
+  endif()
+endif()
+
+find_package(TBB ${MINIMUM_TBB_VERSION} REQUIRED COMPONENTS tbb)
+if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_TBB_VERSION)
+  if(${Tbb_VERSION} VERSION_LESS FUTURE_MINIMUM_TBB_VERSION)
+    message(DEPRECATION "Support for TBB versions < ${FUTURE_MINIMUM_TBB_VERSION} "
+      "is deprecated and will be removed.")
+  endif()
+endif()
+
+if(USE_IMATH_HALF)
+  find_package(Imath CONFIG)
+  if (NOT TARGET Imath::Imath)
+    find_package(IlmBase ${MINIMUM_ILMBASE_VERSION} REQUIRED COMPONENTS Half)
+    if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_ILMBASE_VERSION)
+      if(${IlmBase_VERSION} VERSION_LESS FUTURE_MINIMUM_ILMBASE_VERSION)
+        message(DEPRECATION "Support for IlmBase versions < ${FUTURE_MINIMUM_ILMBASE_VERSION} "
+          "is deprecated and will be removed.")
+      endif()
+    endif()
+  else()
+    message(STATUS "Found Imath ${Imath_VERSION}")
+  endif()
+endif()
+
+if(USE_LOG4CPLUS)
+  # Find Log4CPlus libraries
+  find_package(Log4cplus ${MINIMUM_LOG4CPLUS_VERSION} REQUIRED)
+endif()
+
+if(USE_BLOSC)
+  # Find Blosc libraries
+  find_package(Blosc ${MINIMUM_BLOSC_VERSION} REQUIRED)
+  if(Blosc_VERSION)
+    if(OPENVDB_FUTURE_DEPRECATION AND FUTURE_MINIMUM_BLOSC_VERSION)
+      if(${Blosc_VERSION} VERSION_LESS FUTURE_MINIMUM_BLOSC_VERSION)
+        message(DEPRECATION "Support for Blosc versions < ${FUTURE_MINIMUM_BLOSC_VERSION} "
+          "is deprecated and will be removed.")
+      endif()
+    endif()
+    # Print a warning if using of the blosc versions with regression issues
+    # with Blosc 1.5.0 caches.
+    if((Blosc_VERSION VERSION_GREATER_EQUAL 1.11.0 AND
+        Blosc_VERSION VERSION_LESS 1.14.0) OR
+       (Blosc_VERSION VERSION_GREATER_EQUAL 1.16.0 AND
+        Blosc_VERSION VERSION_LESS 1.16.2))
+      message(WARNING "The following Blosc versions are incompatible with the "
+        "recommended builds of OpenVDB: [1.11.0 -> 1.14.0) [1.16.0, 1.16.1]. "
+        "Found Blosc version '${Blosc_VERSION}' which falls in this range. We "
+        "strongly recommend using the new future minimum version '${FUTURE_MINIMUM_BLOSC_VERSION}'")
+    endif()
+  endif()
+else()
+  message(WARNING "Blosc support is disabled. It is strongly recommended to "
+    "enable blosc for optimal builds of OpenVDB and to support compatible "
+    "serialization of other OpenVDB installations."
+  )
+endif()
+
+if(USE_BLOSC OR USE_ZLIB)
+  if(USE_STATIC_DEPENDENCIES)
+    set(_ZLIB_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+    if(WIN32)
+      set(CMAKE_FIND_LIBRARY_SUFFIXES ".lib")
+    else()
+      set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+    endif()
+  endif()
+  find_package(ZLIB ${MINIMUM_ZLIB_VERSION} REQUIRED)
+  if(USE_STATIC_DEPENDENCIES)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ${_ZLIB_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES})
+    unset(_ZLIB_ORIG_CMAKE_FIND_LIBRARY_SUFFIXES)
   endif()
 endif()
 
@@ -122,16 +205,52 @@ if(UNIX)
 endif()
 
 # Set deps. Note that the order here is important. If we're building against
-# Houdini 17.5 we must include OpenEXR and IlmBase deps first to ensure the
-# users chosen namespaced headers are correctly prioritized. Otherwise other
-# include paths from shared installs (including houdini) may pull in the wrong
-# headers
+# Houdini 17.5 or later we must include IlmBase deps first to ensure the users
+# chosen namespaced headers are correctly prioritized. Otherwise other include
+# paths from shared installs (including houdini) may pull in the wrong headers
 
-set(OPENVDB_CORE_DEPENDENT_LIBS
-  Boost::iostreams
-  Boost::system
-  IlmBase::Half
-)
+set(OPENVDB_CORE_DEPENDENT_LIBS "")
+
+if(USE_IMATH_HALF)
+  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS
+    $<TARGET_NAME_IF_EXISTS:IlmBase::Half> $<TARGET_NAME_IF_EXISTS:Imath::Imath>)
+endif()
+
+# We then choose to pull in TBB. If building aganst Houdini, TBB should
+# always be pulled from there (we should always be using the version of TBB
+# shipped with Houdini).
+
+list(APPEND OPENVDB_CORE_DEPENDENT_LIBS TBB::tbb)
+
+if(USE_LOG4CPLUS)
+  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Log4cplus::log4cplus)
+endif()
+
+# @todo blosc and zlib should be hidden (privately linked in):
+# See FindOpenVDB.cmake
+# @warning If building against Houdini these should be picked up from the
+# Houdini installation. If a custom version of EXR is in use, be careful
+# that zlib/blosc headers/libs are not also in the same location e.g.
+# /usr/local
+
+if(USE_BLOSC)
+  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Blosc::blosc)
+endif()
+
+if(USE_BLOSC OR USE_ZLIB)
+  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS ZLIB::ZLIB)
+endif()
+
+if(UNIX)
+  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Threads::Threads)
+endif()
+
+# Pull in Boost last as houdini's boost (hboost) is fully namespaced and libs
+# are renamed too. Boost can be pulled in at any time, but do it last so that,
+# if it's in a shared place (like /usr/local) it doesn't accidently pull in
+# other headers.
+
+list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Boost::iostreams)
 
 if(WIN32)
   # Boost headers contain #pragma commands on Windows which causes Boost
@@ -146,49 +265,92 @@ if(WIN32)
   endif()
 endif()
 
-if(USE_EXR)
-  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS
-    IlmBase::IlmThread
-    IlmBase::Iex
-    IlmBase::Imath
-    OpenEXR::IlmImf
-  )
-endif()
-
-if(USE_LOG4CPLUS)
-  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Log4cplus::log4cplus)
-endif()
-
-# @todo blosc and zlib should be hidden (privately linked in):
-# See FindOpenVDB.cmake
-
-if(USE_BLOSC)
-  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Blosc::blosc)
-endif()
-
-list(APPEND OPENVDB_CORE_DEPENDENT_LIBS
-  TBB::tbb
-  ZLIB::ZLIB
-)
-
-if(UNIX)
-  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Threads::Threads)
-endif()
-
-if(TARGET Jemalloc::jemalloc)
-  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS Jemalloc::jemalloc)
-endif()
-
-if(TARGET TBB::tbbmalloc AND TARGET TBB::tbbmalloc_proxy)
-  list(APPEND OPENVDB_CORE_DEPENDENT_LIBS
-    TBB::tbbmalloc
-    TBB::tbbmalloc_proxy
-  )
-endif()
-
 ##########################################################################
 
 ##### Core library configuration
+
+# Configure the version header
+
+if(USE_IMATH_HALF)
+  set(OPENVDB_USE_IMATH_HALF 1)
+endif()
+if(USE_ZLIB)
+  set(OPENVDB_USE_ZLIB 1)
+  if(USE_BLOSC)
+    set(OPENVDB_USE_BLOSC 1)
+  endif()
+endif()
+if(USE_EXPLICIT_INSTANTIATION)
+  set(OPENVDB_USE_EXPLICIT_INSTANTIATION 1)
+endif()
+
+# Configure VDB version in the form: ("%02x%02x%04x", major, minor, patch)
+math(EXPR OPENVDB_PACKED_VERSION "${OpenVDB_MAJOR_VERSION} << 24")
+math(EXPR OPENVDB_PACKED_VERSION "${OPENVDB_PACKED_VERSION} | ((${OpenVDB_MINOR_VERSION} & 0xFF) << 16)")
+math(EXPR OPENVDB_PACKED_VERSION "${OPENVDB_PACKED_VERSION} | (${OpenVDB_PATCH_VERSION} & 0xFFFF)")
+
+if(Imath_VERSION)
+  set(OPENVDB_IMATH_VERSION ${Imath_VERSION})
+endif()
+
+# Configure explicit instantiation trees and extern template declarations
+if(USE_EXPLICIT_INSTANTIATION)
+  # Define the list of OpenVDB trees for which to use explicit instantiation
+  # @note The tree definition is expected to be available when including openvdb/openvdb.h
+
+  set(OPENVDB_LIBRARY_INSTANTIATION_REAL_TREES
+    FloatTree
+    DoubleTree
+  )
+
+  set(OPENVDB_LIBRARY_INSTANTIATION_NUMERIC_TREES
+    Int32Tree
+    Int64Tree
+    ${OPENVDB_LIBRARY_INSTANTIATION_REAL_TREES}
+  )
+
+  set(OPENVDB_LIBRARY_INSTANTIATION_VEC3_TREES
+    Vec3STree
+    Vec3DTree
+    Vec3ITree
+  )
+
+  set(OPENVDB_LIBRARY_INSTANTIATION_VOLUME_TREES
+    BoolTree
+    ${OPENVDB_LIBRARY_INSTANTIATION_NUMERIC_TREES}
+    ${OPENVDB_LIBRARY_INSTANTIATION_VEC3_TREES}
+  )
+
+  set(OPENVDB_LIBRARY_INSTANTIATION_ALL_TREES
+    MaskTree
+    points::PointDataTree
+    ${OPENVDB_LIBRARY_INSTANTIATION_VOLUME_TREES}
+  )
+
+  # Write all the template instantiations into strings to inject into version.h
+  # The "Function" itself is an argument provided by the OPENVDB_*_TREE_INSTANTIATE macros
+
+  set(TEMPLATE_STR " \\\n    OPENVDB_INSTANTIATE Function")
+  foreach(TREE ${OPENVDB_LIBRARY_INSTANTIATION_ALL_TREES})
+    if(${TREE} IN_LIST OPENVDB_LIBRARY_INSTANTIATION_REAL_TREES)
+      string(APPEND OPENVDB_REAL_TREE_INSTANTIATIONS "${TEMPLATE_STR}(${TREE});")
+    endif()
+    if(${TREE} IN_LIST OPENVDB_LIBRARY_INSTANTIATION_NUMERIC_TREES)
+      string(APPEND OPENVDB_NUMERIC_TREE_INSTANTIATIONS "${TEMPLATE_STR}(${TREE});")
+    endif()
+    if(${TREE} IN_LIST OPENVDB_LIBRARY_INSTANTIATION_VEC3_TREES)
+      string(APPEND OPENVDB_VEC3_TREE_INSTANTIATIONS "${TEMPLATE_STR}(${TREE});")
+    endif()
+    if(${TREE} IN_LIST OPENVDB_LIBRARY_INSTANTIATION_VOLUME_TREES)
+      string(APPEND OPENVDB_VOLUME_TREE_INSTANTIATIONS "${TEMPLATE_STR}(${TREE});")
+    endif()
+    string(APPEND OPENVDB_ALL_TREE_INSTANTIATIONS "${TEMPLATE_STR}(${TREE});")
+  endforeach()
+endif()
+
+configure_file(version.h.in openvdb/version.h)
+
+##########################################################################
 
 set(OPENVDB_LIBRARY_SOURCE_FILES
   Grid.cc
@@ -200,6 +362,7 @@ set(OPENVDB_LIBRARY_SOURCE_FILES
   io/Queue.cc
   io/Stream.cc
   io/TempFile.cc
+  math/Half.cc
   math/Maps.cc
   math/Proximity.cc
   math/QuantizedUnitVec.cc
@@ -227,7 +390,7 @@ set(OPENVDB_LIBRARY_INCLUDE_FILES
   Platform.h
   PlatformConfig.h
   Types.h
-  version.h
+  TypeList.h
 )
 
 set(OPENVDB_LIBRARY_IO_INCLUDE_FILES
@@ -248,6 +411,8 @@ set(OPENVDB_LIBRARY_MATH_INCLUDE_FILES
   math/Coord.h
   math/DDA.h
   math/FiniteDifference.h
+  math/Half.h
+  math/HalfLimits.h
   math/LegacyFrustum.h
   math/Maps.h
   math/Mat.h
@@ -286,13 +451,16 @@ set(OPENVDB_LIBRARY_POINTS_INCLUDE_FILES
   points/PointMove.h
   points/PointSample.h
   points/PointScatter.h
+  points/PointStatistics.h
   points/StreamCompression.h
 )
 
 set(OPENVDB_LIBRARY_TOOLS_INCLUDE_FILES
+  tools/Activate.h
   tools/ChangeBackground.h
   tools/Clip.h
   tools/Composite.h
+  tools/Count.h
   tools/Dense.h
   tools/DenseSparseTools.h
   tools/Diagnostics.h
@@ -313,9 +481,11 @@ set(OPENVDB_LIBRARY_TOOLS_INCLUDE_FILES
   tools/LevelSetTracker.h
   tools/LevelSetUtil.h
   tools/Mask.h
+  tools/Merge.h
   tools/MeshToVolume.h
   tools/Morphology.h
   tools/MultiResGrid.h
+  tools/NodeVisitor.h
   tools/ParticleAtlas.h
   tools/ParticlesToLevelSet.h
   tools/PointAdvect.h
@@ -357,6 +527,7 @@ set(OPENVDB_LIBRARY_TREE_INCLUDE_FILES
 
 set(OPENVDB_LIBRARY_UTIL_INCLUDE_FILES
   util/CpuTimer.h
+  util/ExplicitInstantiation.h
   util/Formats.h
   util/logging.h
   util/MapsUtil.h
@@ -366,6 +537,51 @@ set(OPENVDB_LIBRARY_UTIL_INCLUDE_FILES
   util/PagedArray.h
   util/Util.h
 )
+
+set(OPENVDB_LIBRARY_THREAD_INCLUDE_FILES
+  thread/Threading.h
+)
+
+##########################################################################
+
+# Configure auto-generation of explicit template definition translation units
+
+if(USE_EXPLICIT_INSTANTIATION)
+  # Define the list of headers for which to generate new translation units.
+  # Not all the tools headers have instantiations currently, but they are
+  # inexpensive to generate in this case.
+  set(OPENVDB_LIBRARY_INSTANTIATION_HEADERS
+    ${OPENVDB_LIBRARY_TOOLS_INCLUDE_FILES}
+  )
+
+  # A new source file is generated by CMake for every header
+  # into a new instantiations subdir.
+  file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/instantiations)
+  foreach(HEADER ${OPENVDB_LIBRARY_INSTANTIATION_HEADERS})
+    # String replace to extract the name from the header filepath
+    # "tools/Activate.h" => "Activate"
+    string(REGEX REPLACE "^.*/(.*).h" "\\1" NAME ${HEADER})
+
+    # Make name upper case "Activate" => "ACTIVATE"
+    string(TOUPPER ${NAME} UPPER_NAME)
+
+    # Define the source file location - "<binary_dir>/instantiations/Activate.cc"
+    set(INSTANTIATE_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/instantiations/${NAME}.cc")
+
+    # The auto-generated file holds the instantiate define and the header
+    # which contains all the functions to be explicitly instantiated.
+    file(WRITE ${INSTANTIATE_SOURCE}
+      "#define OPENVDB_INSTANTIATE_${UPPER_NAME}\n"
+      "#include <openvdb/${HEADER}>\n"
+    )
+
+    # Add to the list of library source files
+    # (prepend as instantiations tend to be slow to compile).
+    list(PREPEND OPENVDB_LIBRARY_SOURCE_FILES ${INSTANTIATE_SOURCE})
+  endforeach()
+endif()
+
+##########################################################################
 
 # @todo CMake >= 3.12, use an object library to consolidate shared/static
 # builds. There are limitations with earlier versions of CMake when used with
@@ -396,24 +612,16 @@ endif()
 
 # Private defines (not inherited by dependent projects)
 list(APPEND OPENVDB_CORE_PRIVATE_DEFINES -DOPENVDB_PRIVATE)
-if(USE_BLOSC)
-  list(APPEND OPENVDB_CORE_PRIVATE_DEFINES -DOPENVDB_USE_BLOSC)
+
+if(WIN32)
+  if(USE_IMATH_HALF)
+    # @note OPENVDB_OPENEXR_STATICLIB is old functionality and should be removed
+    if(ILMBASE_USE_STATIC_LIBS OR ("${ILMBASE_Half_LIB_TYPE}" STREQUAL STATIC))
+      list(APPEND OPENVDB_CORE_PUBLIC_DEFINES -DOPENVDB_OPENEXR_STATICLIB)
+    endif()
+  endif()
 endif()
 
-# Public defines
-if(WIN32)
-  # @note OPENVDB_OPENEXR_STATICLIB is old functionality from the makefiles
-  #       used in PlatformConfig.h to configure EXR exports. Once this file
-  #       is completely removed, this define can be too
-  get_target_property(ILMBASE_LIB_TYPE IlmBase::Half TYPE)
-  if(OPENEXR_USE_STATIC_LIBS OR (${ILMBASE_LIB_TYPE} STREQUAL STATIC_LIBRARY))
-    list(APPEND OPENVDB_CORE_PUBLIC_DEFINES -DOPENVDB_OPENEXR_STATICLIB)
-  endif()
-  list(APPEND OPENVDB_CORE_PUBLIC_DEFINES -D_WIN32 -DNOMINMAX)
-endif()
-if(USE_EXR)
-  list(APPEND OPENVDB_CORE_PUBLIC_DEFINES -DOPENVDB_TOOLS_RAYTRACER_USE_EXR)
-endif()
 if(USE_LOG4CPLUS)
   list(APPEND OPENVDB_CORE_PUBLIC_DEFINES -DOPENVDB_USE_LOG4CPLUS)
 endif()
@@ -424,12 +632,12 @@ endif()
 
 if(OPENVDB_CORE_STATIC)
   target_include_directories(openvdb_static
-    PUBLIC ../
+    PUBLIC ../ ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/openvdb
     PRIVATE .
   )
 
   target_compile_definitions(openvdb_static
-    PUBLIC ${OPENVDB_CORE_PUBLIC_DEFINES}
+    PUBLIC ${OPENVDB_CORE_PUBLIC_DEFINES} -DOPENVDB_STATICLIB
     PRIVATE ${OPENVDB_CORE_PRIVATE_DEFINES}
   )
 
@@ -438,10 +646,17 @@ if(OPENVDB_CORE_STATIC)
   )
 
   set_target_properties(openvdb_static
-    PROPERTIES OUTPUT_NAME ${OPENVDB_STATIC_LIBRARY_NAME}
-  )
+    PROPERTIES OUTPUT_NAME ${OPENVDB_STATIC_LIBRARY_NAME})
 
-  if(WIN32)
+  if(MSVC)
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+      # NOTE: MSVC_RUNTIME_LIBRARY does not propagate to targets, so
+      # also add it explicitly as a compile option
+      set_target_properties(openvdb_static PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+      target_compile_options(openvdb_static PUBLIC
+        "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/MT$<$<CONFIG:Debug>:d>>")
+    endif()
     set_target_properties(openvdb_static PROPERTIES PREFIX "lib")
   endif()
 endif()
@@ -450,7 +665,7 @@ endif()
 
 if(OPENVDB_CORE_SHARED)
   target_include_directories(openvdb_shared
-    PUBLIC ../
+    PUBLIC ../ ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/openvdb
     PRIVATE .
   )
 
@@ -467,23 +682,17 @@ if(OPENVDB_CORE_SHARED)
     PROPERTIES
       OUTPUT_NAME ${OPENVDB_SHARED_LIBRARY_NAME}
       SOVERSION ${OpenVDB_MAJOR_VERSION}.${OpenVDB_MINOR_VERSION}
-      VERSION ${OpenVDB_MAJOR_VERSION}.${OpenVDB_MINOR_VERSION}.${OpenVDB_PATCH_VERSION}
-  )
+      VERSION ${OpenVDB_MAJOR_VERSION}.${OpenVDB_MINOR_VERSION}.${OpenVDB_PATCH_VERSION})
 
-  if(OPENVDB_ENABLE_RPATH)
-    # @todo There is probably a better way to do this for imported targets
-    list(APPEND RPATHS
-      ${Boost_LIBRARY_DIRS}
-      ${IlmBase_LIBRARY_DIRS}
-      ${OpenEXR_LIBRARY_DIRS}
-      ${Log4cplus_LIBRARY_DIRS}
-      ${Blosc_LIBRARY_DIRS}
-      ${Tbb_LIBRARY_DIRS}
-    )
-    list(REMOVE_DUPLICATES RPATHS)
-    set_target_properties(openvdb_shared
-      PROPERTIES INSTALL_RPATH "${RPATHS}"
-    )
+  if(MSVC)
+    if(NOT CMAKE_MSVC_RUNTIME_LIBRARY)
+      # NOTE: MSVC_RUNTIME_LIBRARY does not propagate to targets, so
+      # also add it explicitly as a compile option
+      set_target_properties(openvdb_shared PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+      target_compile_options(openvdb_shared PUBLIC
+        "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/MD$<$<CONFIG:Debug>:d>>")
+    endif()
   endif()
 endif()
 
@@ -507,10 +716,12 @@ if(OPENVDB_CORE_SHARED)
   )
 endif()
 
-install(FILES ${OPENVDB_LIBRARY_INCLUDE_FILES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR})
-install(FILES ${OPENVDB_LIBRARY_IO_INCLUDE_FILES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR}/io)
-install(FILES ${OPENVDB_LIBRARY_MATH_INCLUDE_FILES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR}/math)
-install(FILES ${OPENVDB_LIBRARY_POINTS_INCLUDE_FILES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR}/points)
-install(FILES ${OPENVDB_LIBRARY_TOOLS_INCLUDE_FILES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR}/tools)
-install(FILES ${OPENVDB_LIBRARY_TREE_INCLUDE_FILES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR}/tree)
-install(FILES ${OPENVDB_LIBRARY_UTIL_INCLUDE_FILES} DESTINATION ${OPENVDB_INSTALL_INCLUDEDIR}/util)
+install(FILES ${OPENVDB_LIBRARY_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/openvdb/version.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb)
+install(FILES ${OPENVDB_LIBRARY_IO_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/io)
+install(FILES ${OPENVDB_LIBRARY_MATH_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/math)
+install(FILES ${OPENVDB_LIBRARY_POINTS_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/points)
+install(FILES ${OPENVDB_LIBRARY_TOOLS_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/tools)
+install(FILES ${OPENVDB_LIBRARY_TREE_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/tree)
+install(FILES ${OPENVDB_LIBRARY_UTIL_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/util)
+install(FILES ${OPENVDB_LIBRARY_THREAD_INCLUDE_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/openvdb/thread)

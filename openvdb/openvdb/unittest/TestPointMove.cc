@@ -1,8 +1,6 @@
 // Copyright Contributors to the OpenVDB Project
 // SPDX-License-Identifier: MPL-2.0
 
-#include <cppunit/extensions/HelperMacros.h>
-#include "util.h"
 #include <openvdb/points/PointAttribute.h>
 #include <openvdb/points/PointDataGrid.h>
 #include <openvdb/points/PointConversion.h>
@@ -10,8 +8,12 @@
 #include <openvdb/points/PointScatter.h>
 #include <openvdb/openvdb.h>
 #include <openvdb/Types.h>
-#include <tbb/atomic.h>
+#include "util.h"
+
+#include <gtest/gtest.h>
+
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <sstream>
 #include <string>
@@ -20,31 +22,14 @@
 using namespace openvdb;
 using namespace openvdb::points;
 
-class TestPointMove: public CppUnit::TestCase
+class TestPointMove: public ::testing::Test
 {
 public:
-
-    void setUp() override { openvdb::initialize(); }
-    void tearDown() override { openvdb::uninitialize(); }
-
-    CPPUNIT_TEST_SUITE(TestPointMove);
-    CPPUNIT_TEST(testCachedDeformer);
-    CPPUNIT_TEST(testMoveLocal);
-    CPPUNIT_TEST(testMoveGlobal);
-    CPPUNIT_TEST(testCustomDeformer);
-    CPPUNIT_TEST(testPointData);
-    CPPUNIT_TEST(testPointOrder);
-    CPPUNIT_TEST_SUITE_END();
+    void SetUp() override { openvdb::initialize(); }
+    void TearDown() override { openvdb::uninitialize(); }
 
     void testCachedDeformer();
-    void testMoveLocal();
-    void testMoveGlobal();
-    void testCustomDeformer();
-    void testPointData();
-    void testPointOrder();
 }; // class TestPointMove
-
-CPPUNIT_TEST_SUITE_REGISTRATION(TestPointMove);
 
 
 ////////////////////////////////////////
@@ -174,10 +159,10 @@ ASSERT_APPROX_EQUAL(const std::vector<T>& a, const std::vector<T>& b,
     std::stringstream ss;
     ss << "Assertion Line Number: " << lineNumber;
 
-    CPPUNIT_ASSERT_EQUAL_MESSAGE(ss.str(), a.size(), b.size());
+    if (a.size() != b.size())   FAIL() << ss.str();
 
     for (int i = 0; i < a.size(); i++) {
-        CPPUNIT_ASSERT_MESSAGE(ss.str(), math::isApproxEqual(a[i], b[i]));
+        if (!math::isApproxEqual(a[i], b[i]))   FAIL() << ss.str();
     }
 }
 
@@ -190,10 +175,10 @@ ASSERT_APPROX_EQUAL(const std::vector<math::Vec3<T>>& a, const std::vector<math:
     std::stringstream ss;
     ss << "Assertion Line Number: " << lineNumber;
 
-    CPPUNIT_ASSERT_EQUAL_MESSAGE(ss.str(), a.size(), b.size());
+    if (a.size() != b.size())   FAIL() << ss.str();
 
     for (size_t i = 0; i < a.size(); i++) {
-        CPPUNIT_ASSERT_MESSAGE(ss.str(), math::isApproxEqual(a[i], b[i]));
+        if (!math::isApproxEqual(a[i], b[i]))   FAIL() << ss.str();
     }
 }
 
@@ -226,65 +211,64 @@ struct OddIndexFilter
 } // namespace
 
 
-void
-TestPointMove::testCachedDeformer()
+void TestPointMove::testCachedDeformer()
 {
     NullObject nullObject;
 
     // create an empty cache and CachedDeformer
     CachedDeformer<double>::Cache cache;
-    CPPUNIT_ASSERT(cache.leafs.empty());
+    EXPECT_TRUE(cache.leafs.empty());
 
     CachedDeformer<double> cachedDeformer(cache);
 
     // check initialization is as expected
-    CPPUNIT_ASSERT(cachedDeformer.mLeafVec == nullptr);
-    CPPUNIT_ASSERT(cachedDeformer.mLeafMap == nullptr);
+    EXPECT_TRUE(cachedDeformer.mLeafVec == nullptr);
+    EXPECT_TRUE(cachedDeformer.mLeafMap == nullptr);
 
     // throw when resetting cachedDeformer with an empty cache
-    CPPUNIT_ASSERT_THROW(cachedDeformer.reset(nullObject, size_t(0)), openvdb::IndexError);
+    EXPECT_THROW(cachedDeformer.reset(nullObject, size_t(0)), openvdb::IndexError);
 
     // manually create one leaf in the cache
     cache.leafs.resize(1);
     auto& leaf = cache.leafs[0];
-    CPPUNIT_ASSERT(leaf.vecData.empty());
-    CPPUNIT_ASSERT(leaf.mapData.empty());
-    CPPUNIT_ASSERT_EQUAL(Index(0), leaf.totalSize);
+    EXPECT_TRUE(leaf.vecData.empty());
+    EXPECT_TRUE(leaf.mapData.empty());
+    EXPECT_EQ(Index(0), leaf.totalSize);
 
     // reset should no longer throw and leaf vec pointer should now be non-null
-    CPPUNIT_ASSERT_NO_THROW(cachedDeformer.reset(nullObject, size_t(0)));
-    CPPUNIT_ASSERT(cachedDeformer.mLeafMap == nullptr);
-    CPPUNIT_ASSERT(cachedDeformer.mLeafVec != nullptr);
-    CPPUNIT_ASSERT(cachedDeformer.mLeafVec->empty());
+    EXPECT_NO_THROW(cachedDeformer.reset(nullObject, size_t(0)));
+    EXPECT_TRUE(cachedDeformer.mLeafMap == nullptr);
+    EXPECT_TRUE(cachedDeformer.mLeafVec != nullptr);
+    EXPECT_TRUE(cachedDeformer.mLeafVec->empty());
 
     // nothing stored in the cache so position is unchanged
     DummyIter indexIter(0);
     Vec3d position(0,0,0);
     Vec3d newPosition(position);
     cachedDeformer.apply(newPosition, indexIter);
-    CPPUNIT_ASSERT(math::isApproxEqual(position, newPosition));
+    EXPECT_TRUE(math::isApproxEqual(position, newPosition));
 
     // insert a new value into the leaf vector and verify tbe position is deformed
     Vec3d deformedPosition(5,10,15);
     leaf.vecData.push_back(deformedPosition);
     cachedDeformer.apply(newPosition, indexIter);
-    CPPUNIT_ASSERT(math::isApproxEqual(deformedPosition, newPosition));
+    EXPECT_TRUE(math::isApproxEqual(deformedPosition, newPosition));
 
     // insert a new value into the leaf map and verify the position is deformed as before
     Vec3d newDeformedPosition(2,3,4);
     leaf.mapData.insert({0, newDeformedPosition});
     newPosition.setZero();
     cachedDeformer.apply(newPosition, indexIter);
-    CPPUNIT_ASSERT(math::isApproxEqual(deformedPosition, newPosition));
+    EXPECT_TRUE(math::isApproxEqual(deformedPosition, newPosition));
 
     // now reset the cached deformer and verify the value is updated
     // (map has precedence over vector)
     cachedDeformer.reset(nullObject, size_t(0));
-    CPPUNIT_ASSERT(cachedDeformer.mLeafMap != nullptr);
-    CPPUNIT_ASSERT(cachedDeformer.mLeafVec == nullptr);
+    EXPECT_TRUE(cachedDeformer.mLeafMap != nullptr);
+    EXPECT_TRUE(cachedDeformer.mLeafVec == nullptr);
     newPosition.setZero();
     cachedDeformer.apply(newPosition, indexIter);
-    CPPUNIT_ASSERT(math::isApproxEqual(newDeformedPosition, newPosition));
+    EXPECT_TRUE(math::isApproxEqual(newDeformedPosition, newPosition));
 
     // four points, some same leaf, some different
     const float voxelSize = 1.0f;
@@ -303,7 +287,7 @@ TestPointMove::testCachedDeformer()
     NullFilter nullFilter;
     cachedDeformer.evaluate(*points, nullDeformer, nullFilter);
 
-    CPPUNIT_ASSERT_EQUAL(size_t(points->tree().leafCount()), cache.leafs.size());
+    EXPECT_EQ(size_t(points->tree().leafCount()), cache.leafs.size());
 
     int leafIndex = 0;
     for (auto leafIter = points->tree().cbeginLeaf(); leafIter; ++leafIter) {
@@ -311,7 +295,7 @@ TestPointMove::testCachedDeformer()
             AttributeHandle<Vec3f> handle(leafIter->constAttributeArray("P"));
             Vec3f pos(handle.get(*iter) + iter.getCoord().asVec3s());
             Vec3f cachePosition = cache.leafs[leafIndex].vecData[*iter];
-            CPPUNIT_ASSERT(math::isApproxEqual(pos, cachePosition));
+            EXPECT_TRUE(math::isApproxEqual(pos, cachePosition));
         }
         leafIndex++;
     }
@@ -323,7 +307,7 @@ TestPointMove::testCachedDeformer()
 
     cachedDeformer.evaluate(*points, yOffsetDeformer, nullFilter);
 
-    CPPUNIT_ASSERT_EQUAL(size_t(points->tree().leafCount()), cache.leafs.size());
+    EXPECT_EQ(size_t(points->tree().leafCount()), cache.leafs.size());
 
     leafIndex = 0;
     for (auto leafIter = points->tree().cbeginLeaf(); leafIter; ++leafIter) {
@@ -331,7 +315,7 @@ TestPointMove::testCachedDeformer()
             AttributeHandle<Vec3f> handle(leafIter->constAttributeArray("P"));
             Vec3f pos(handle.get(*iter) + iter.getCoord().asVec3s() + yOffset);
             Vec3f cachePosition = cache.leafs[leafIndex].vecData[*iter];
-            CPPUNIT_ASSERT(math::isApproxEqual(pos, cachePosition));
+            EXPECT_TRUE(math::isApproxEqual(pos, cachePosition));
         }
         leafIndex++;
     }
@@ -341,23 +325,35 @@ TestPointMove::testCachedDeformer()
     OddIndexFilter oddFilter;
     cachedDeformer.evaluate(*points, yOffsetDeformer, oddFilter);
 
-    CPPUNIT_ASSERT_EQUAL(size_t(points->tree().leafCount()), cache.leafs.size());
+    EXPECT_EQ(size_t(points->tree().leafCount()), cache.leafs.size());
 
     leafIndex = 0;
     for (auto leafIter = points->tree().cbeginLeaf(); leafIter; ++leafIter) {
+        // odd filter writes to mapData, not vecData
+        EXPECT_TRUE(cache.leafs[leafIndex].vecData.empty());
+        const auto& data = cache.leafs[leafIndex].mapData;
+
         for (auto iter = leafIter->beginIndexOn(); iter; ++iter) {
             AttributeHandle<Vec3f> handle(leafIter->constAttributeArray("P"));
             Vec3f pos(handle.get(*iter) + iter.getCoord().asVec3s() + yOffset);
-            Vec3f cachePosition = cache.leafs[leafIndex].vecData[*iter];
-            CPPUNIT_ASSERT(math::isApproxEqual(pos, cachePosition));
+
+            const auto miter = data.find(*iter);
+            if (!oddFilter.valid(iter)) {
+                EXPECT_TRUE(miter == data.cend());
+            }
+            else {
+                EXPECT_TRUE(miter != data.cend());
+                const Vec3f& cachePosition = miter->second;
+                EXPECT_TRUE(math::isApproxEqual(pos, cachePosition));
+            }
         }
         leafIndex++;
     }
 }
+TEST_F(TestPointMove, testCachedDeformer) { testCachedDeformer(); }
 
 
-void
-TestPointMove::testMoveLocal()
+TEST_F(TestPointMove, testMoveLocal)
 {
     // This test is for points that only move locally, meaning that
     // they remain in the leaf from which they originated
@@ -515,8 +511,7 @@ TestPointMove::testMoveLocal()
 }
 
 
-void
-TestPointMove::testMoveGlobal()
+TEST_F(TestPointMove, testMoveGlobal)
 {
     { // four points, all different leafs
         const float voxelSize = 0.1f;
@@ -706,8 +701,8 @@ struct CustomDeformer
     using LeafT = PointDataGrid::TreeType::LeafNodeType;
 
     CustomDeformer(const openvdb::Vec3d& offset,
-                   tbb::atomic<int>& resetCalls,
-                   tbb::atomic<int>& applyCalls)
+                   std::atomic<int>& resetCalls,
+                   std::atomic<int>& applyCalls)
         : mOffset(offset)
         , mResetCalls(resetCalls)
         , mApplyCalls(applyCalls) { }
@@ -729,8 +724,8 @@ struct CustomDeformer
     }
 
     const openvdb::Vec3d mOffset;
-    tbb::atomic<int>& mResetCalls;
-    tbb::atomic<int>& mApplyCalls;
+    std::atomic<int>& mResetCalls;
+    std::atomic<int>& mApplyCalls;
 }; // struct CustomDeformer
 
 // Custom Deformer that always returns the position supplied in the constructor
@@ -753,8 +748,7 @@ struct StaticDeformer
 
 } // namespace
 
-void
-TestPointMove::testCustomDeformer()
+TEST_F(TestPointMove, testCustomDeformer)
 {
     { // four points, some same leaf, some different, custom deformer
         const float voxelSize = 1.0f;
@@ -775,7 +769,7 @@ TestPointMove::testCustomDeformer()
         const int leafCount = points->tree().leafCount();
         const int pointCount = int(positions.size());
 
-        tbb::atomic<int> resetCalls, applyCalls;
+        std::atomic<int> resetCalls, applyCalls;
         resetCalls = 0;
         applyCalls = 0;
 
@@ -785,8 +779,8 @@ TestPointMove::testCustomDeformer()
 
         movePoints(*points, deformer);
 
-        CPPUNIT_ASSERT(2*leafCount == resetCalls);
-        CPPUNIT_ASSERT(2*pointCount == applyCalls);
+        EXPECT_TRUE(2*leafCount == resetCalls);
+        EXPECT_TRUE(2*pointCount == applyCalls);
 
         std::vector<Vec3s> actualPositions = gridToPositions(points);
 
@@ -804,8 +798,8 @@ TestPointMove::testCustomDeformer()
 
         movePoints(*cachedPoints, cachedDeformer);
 
-        CPPUNIT_ASSERT(leafCount == resetCalls);
-        CPPUNIT_ASSERT(pointCount == applyCalls);
+        EXPECT_TRUE(leafCount == resetCalls);
+        EXPECT_TRUE(pointCount == applyCalls);
 
         std::vector<Vec3s> cachedPositions = gridToPositions(cachedPoints);
 
@@ -863,8 +857,7 @@ struct AssignDeformer
 }
 
 
-void
-TestPointMove::testPointData()
+TEST_F(TestPointMove, testPointData)
 {
     // four points, some same leaf, some different
     // spatial order is (1, 0, 3, 2)
@@ -1023,30 +1016,30 @@ TestPointMove::testPointData()
 
         // new reversed order is (2, 3, 0, 1)
 
-        CPPUNIT_ASSERT_EQUAL(2, id2[0]);
-        CPPUNIT_ASSERT_EQUAL(3, id2[1]);
-        CPPUNIT_ASSERT_EQUAL(0, id2[2]);
-        CPPUNIT_ASSERT_EQUAL(1, id2[3]);
+        EXPECT_EQ(2, id2[0]);
+        EXPECT_EQ(3, id2[1]);
+        EXPECT_EQ(0, id2[2]);
+        EXPECT_EQ(1, id2[3]);
 
-        CPPUNIT_ASSERT(math::isApproxEqual(radius[0], radius2[2], 1e-3f));
-        CPPUNIT_ASSERT(math::isApproxEqual(radius[1], radius2[3], 1e-3f));
-        CPPUNIT_ASSERT(math::isApproxEqual(radius[2], radius2[0], 1e-3f));
-        CPPUNIT_ASSERT(math::isApproxEqual(radius[3], radius2[1], 1e-3f));
+        EXPECT_TRUE(math::isApproxEqual(radius[0], radius2[2], 1e-3f));
+        EXPECT_TRUE(math::isApproxEqual(radius[1], radius2[3], 1e-3f));
+        EXPECT_TRUE(math::isApproxEqual(radius[2], radius2[0], 1e-3f));
+        EXPECT_TRUE(math::isApproxEqual(radius[3], radius2[1], 1e-3f));
 
-        CPPUNIT_ASSERT_EQUAL(short(0), oddGroups2[0]);
-        CPPUNIT_ASSERT_EQUAL(short(1), oddGroups2[1]);
-        CPPUNIT_ASSERT_EQUAL(short(0), oddGroups2[2]);
-        CPPUNIT_ASSERT_EQUAL(short(1), oddGroups2[3]);
+        EXPECT_EQ(short(0), oddGroups2[0]);
+        EXPECT_EQ(short(1), oddGroups2[1]);
+        EXPECT_EQ(short(0), oddGroups2[2]);
+        EXPECT_EQ(short(1), oddGroups2[3]);
 
-        CPPUNIT_ASSERT_EQUAL(short(1), evenGroups2[0]);
-        CPPUNIT_ASSERT_EQUAL(short(0), evenGroups2[1]);
-        CPPUNIT_ASSERT_EQUAL(short(1), evenGroups2[2]);
-        CPPUNIT_ASSERT_EQUAL(short(0), evenGroups2[3]);
+        EXPECT_EQ(short(1), evenGroups2[0]);
+        EXPECT_EQ(short(0), evenGroups2[1]);
+        EXPECT_EQ(short(1), evenGroups2[2]);
+        EXPECT_EQ(short(0), evenGroups2[3]);
 
-        CPPUNIT_ASSERT_EQUAL(short(1), nonZeroGroups2[0]);
-        CPPUNIT_ASSERT_EQUAL(short(1), nonZeroGroups2[1]);
-        CPPUNIT_ASSERT_EQUAL(short(0), nonZeroGroups2[2]);
-        CPPUNIT_ASSERT_EQUAL(short(1), nonZeroGroups2[3]);
+        EXPECT_EQ(short(1), nonZeroGroups2[0]);
+        EXPECT_EQ(short(1), nonZeroGroups2[1]);
+        EXPECT_EQ(short(0), nonZeroGroups2[2]);
+        EXPECT_EQ(short(1), nonZeroGroups2[3]);
     }
 
     { // larger data set with a cached deformer and group filtering
@@ -1116,14 +1109,13 @@ TestPointMove::testPointData()
         // (only odd points are being moved 1.0 in Y)
         double increaseInY = ySumAfter - ySumBefore;
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(increaseInY, static_cast<double>(count) / 2.0,
+        EXPECT_NEAR(increaseInY, static_cast<double>(count) / 2.0,
             /*tolerance=*/double(0.01));
     }
 }
 
 
-void
-TestPointMove::testPointOrder()
+TEST_F(TestPointMove, testPointOrder)
 {
     struct Local
     {

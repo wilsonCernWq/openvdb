@@ -1,8 +1,6 @@
 // Copyright Contributors to the OpenVDB Project
 // SPDX-License-Identifier: MPL-2.0
 
-#include <cppunit/extensions/HelperMacros.h>
-#include "util.h"
 #include <openvdb/points/PointAttribute.h>
 #include <openvdb/points/PointDataGrid.h>
 #include <openvdb/points/PointConversion.h>
@@ -13,36 +11,28 @@
 #include <openvdb/tools/MeshToVolume.h> // createLevelSetBox
 #include <openvdb/openvdb.h>
 #include <openvdb/Types.h>
+
+#include <gtest/gtest.h>
+#include "util.h"
 #include <string>
 #include <vector>
 
 using namespace openvdb;
 using namespace openvdb::points;
 
-class TestPointAdvect: public CppUnit::TestCase
+class TestPointAdvect: public ::testing::Test
 {
 public:
 
-    void setUp() override { openvdb::initialize(); }
-    void tearDown() override { openvdb::uninitialize(); }
-
-    CPPUNIT_TEST_SUITE(TestPointAdvect);
-    CPPUNIT_TEST(testAdvect);
-    CPPUNIT_TEST(testZalesaksDisk);
-    CPPUNIT_TEST_SUITE_END();
-
-    void testAdvect();
-    void testZalesaksDisk();
+    void SetUp() override { openvdb::initialize(); }
+    void TearDown() override { openvdb::uninitialize(); }
 }; // class TestPointAdvect
-
-CPPUNIT_TEST_SUITE_REGISTRATION(TestPointAdvect);
 
 
 ////////////////////////////////////////
 
 
-void
-TestPointAdvect::testAdvect()
+TEST_F(TestPointAdvect, testAdvect)
 {
     // generate four points
 
@@ -116,7 +106,7 @@ TestPointAdvect::testAdvect()
                     positionHandle.get(*iter) + iter.getCoord().asVec3d());
                 Vec3s expectedPosition(positions[theId]);
                 if (integrationOrder > 0)   expectedPosition += velocityBackground;
-                CPPUNIT_ASSERT(math::isApproxEqual(position, expectedPosition, tolerance));
+                EXPECT_TRUE(math::isApproxEqual(position, expectedPosition, tolerance));
             }
         }
     }
@@ -124,7 +114,7 @@ TestPointAdvect::testAdvect()
     // invalid advection scheme
 
     auto zeroVelocityGrid = Vec3SGrid::create(Vec3s(0));
-    CPPUNIT_ASSERT_THROW(advectPoints(*points, *zeroVelocityGrid, 5, 1.0, 1), ValueError);
+    EXPECT_THROW(advectPoints(*points, *zeroVelocityGrid, 5, 1.0, 1), ValueError);
 
     { // advect varying dt and steps
         Vec3s velocityBackground(1.0, 2.0, 3.0);
@@ -146,7 +136,7 @@ TestPointAdvect::testAdvect()
                 Vec3s position = transform.indexToWorld(
                     positionHandle.get(*iter) + iter.getCoord().asVec3d());
                 Vec3s expectedPosition(positions[theId] + velocityBackground * 10.0f);
-                CPPUNIT_ASSERT(math::isApproxEqual(position, expectedPosition, tolerance));
+                EXPECT_TRUE(math::isApproxEqual(position, expectedPosition, tolerance));
             }
         }
     }
@@ -177,7 +167,7 @@ TestPointAdvect::testAdvect()
             advectPoints(*pointsToAdvect, *velocity, integrationOrder, timeStep, steps,
                 advectFilter, filter);
 
-            CPPUNIT_ASSERT_EQUAL(Index64(4), pointCount(pointsToAdvect->tree()));
+            EXPECT_EQ(Index64(4), pointCount(pointsToAdvect->tree()));
 
             for (auto leafIter = pointsToAdvect->tree().beginLeaf(); leafIter; ++leafIter) {
                 AttributeHandle<Vec3s> positionHandle(leafIter->constAttributeArray("P"));
@@ -188,7 +178,7 @@ TestPointAdvect::testAdvect()
                         positionHandle.get(*iter) + iter.getCoord().asVec3d());
                     Vec3s expectedPosition(positions[theId]);
                     if (theId == 2)    expectedPosition += velocityBackground;
-                    CPPUNIT_ASSERT(math::isApproxEqual(position, expectedPosition, tolerance));
+                    EXPECT_TRUE(math::isApproxEqual(position, expectedPosition, tolerance));
                 }
             }
 
@@ -209,7 +199,7 @@ TestPointAdvect::testAdvect()
             advectPoints(*pointsToAdvect, *velocity, integrationOrder, timeStep, steps,
                 advectFilter, filter);
 
-            CPPUNIT_ASSERT_EQUAL(Index64(1), pointCount(pointsToAdvect->tree()));
+            EXPECT_EQ(Index64(1), pointCount(pointsToAdvect->tree()));
 
             for (auto leafIter = pointsToAdvect->tree().beginLeaf(); leafIter; ++leafIter) {
                 AttributeHandle<Vec3s> positionHandle(leafIter->constAttributeArray("P"));
@@ -220,7 +210,7 @@ TestPointAdvect::testAdvect()
                         positionHandle.get(*iter) + iter.getCoord().asVec3d());
                     Vec3s expectedPosition(positions[theId]);
                     expectedPosition += velocityBackground;
-                    CPPUNIT_ASSERT(math::isApproxEqual(position, expectedPosition, tolerance));
+                    EXPECT_TRUE(math::isApproxEqual(position, expectedPosition, tolerance));
                 }
             }
 
@@ -242,7 +232,7 @@ TestPointAdvect::testAdvect()
             advectPoints(*pointsToAdvect, *velocity, integrationOrder, timeStep, steps,
                 advectFilter, filter);
 
-            CPPUNIT_ASSERT_EQUAL(Index64(3), pointCount(pointsToAdvect->tree()));
+            EXPECT_EQ(Index64(3), pointCount(pointsToAdvect->tree()));
 
             for (auto leafIter = pointsToAdvect->tree().beginLeaf(); leafIter; ++leafIter) {
                 AttributeHandle<Vec3s> positionHandle(leafIter->constAttributeArray("P"));
@@ -253,7 +243,7 @@ TestPointAdvect::testAdvect()
                         positionHandle.get(*iter) + iter.getCoord().asVec3d());
                     Vec3s expectedPosition(positions[theId]);
                     if (theId == 1)    expectedPosition += velocityBackground;
-                    CPPUNIT_ASSERT(math::isApproxEqual(position, expectedPosition, tolerance));
+                    EXPECT_TRUE(math::isApproxEqual(position, expectedPosition, tolerance));
                 }
             }
 
@@ -273,7 +263,7 @@ TestPointAdvect::testAdvect()
             advectPoints(*pointsToAdvect, *velocity, integrationOrder, timeStep, steps,
                 advectFilter, filter, false);
 
-            CPPUNIT_ASSERT_EQUAL(Index64(4), pointCount(pointsToAdvect->tree()));
+            EXPECT_EQ(Index64(4), pointCount(pointsToAdvect->tree()));
 
             for (auto leafIter = pointsToAdvect->tree().beginLeaf(); leafIter; ++leafIter) {
                 AttributeHandle<Vec3s> positionHandle(leafIter->constAttributeArray("P"));
@@ -284,7 +274,7 @@ TestPointAdvect::testAdvect()
                         positionHandle.get(*iter) + iter.getCoord().asVec3d());
                     Vec3s expectedPosition(positions[theId]);
                     expectedPosition += velocityBackground;
-                    CPPUNIT_ASSERT(math::isApproxEqual(position, expectedPosition, tolerance));
+                    EXPECT_TRUE(math::isApproxEqual(position, expectedPosition, tolerance));
                 }
             }
         }
@@ -304,7 +294,7 @@ TestPointAdvect::testAdvect()
             advectPoints(*pointsToAdvect, *velocity, integrationOrder, timeStep, steps,
                 advectFilter, filter, false);
 
-            CPPUNIT_ASSERT_EQUAL(Index64(3), pointCount(pointsToAdvect->tree()));
+            EXPECT_EQ(Index64(3), pointCount(pointsToAdvect->tree()));
 
             for (auto leafIter = pointsToAdvect->tree().beginLeaf(); leafIter; ++leafIter) {
                 AttributeHandle<Vec3s> positionHandle(leafIter->constAttributeArray("P"));
@@ -315,7 +305,7 @@ TestPointAdvect::testAdvect()
                         positionHandle.get(*iter) + iter.getCoord().asVec3d());
                     Vec3s expectedPosition(positions[theId]);
                     if (theId == 1)    expectedPosition += velocityBackground;
-                    CPPUNIT_ASSERT(math::isApproxEqual(position, expectedPosition, tolerance));
+                    EXPECT_TRUE(math::isApproxEqual(position, expectedPosition, tolerance));
                 }
             }
 
@@ -326,8 +316,7 @@ TestPointAdvect::testAdvect()
 }
 
 
-void
-TestPointAdvect::testZalesaksDisk()
+TEST_F(TestPointAdvect, testZalesaksDisk)
 {
     // advect a notched sphere known as Zalesak's disk in a rotational velocity field
 
@@ -438,7 +427,7 @@ TestPointAdvect::testZalesaksDisk()
     }
 
     for (Index i = 0; i < count; i++) {
-        CPPUNIT_ASSERT(!math::isApproxEqual(
+        EXPECT_TRUE(!math::isApproxEqual(
             preAdvectPositions[i], postAdvectPositions[i], Vec3f(0.1)));
     }
 
@@ -456,7 +445,7 @@ TestPointAdvect::testZalesaksDisk()
     }
 
     for (Index i = 0; i < count; i++) {
-        CPPUNIT_ASSERT(math::isApproxEqual(
+        EXPECT_TRUE(math::isApproxEqual(
             preAdvectPositions[i], postAdvectPositions[i], Vec3f(0.1)));
     }
 }

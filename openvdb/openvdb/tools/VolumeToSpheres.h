@@ -10,11 +10,12 @@
 
 #include <openvdb/tree/LeafManager.h>
 #include <openvdb/math/Math.h>
-#include "Morphology.h" // for erodeVoxels()
+#include "Morphology.h" // for erodeActiveValues()
 #include "PointScatter.h"
 #include "LevelSetRebuild.h"
 #include "LevelSetUtil.h"
 #include "VolumeToMesh.h"
+#include <openvdb/openvdb.h>
 
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
@@ -57,27 +58,11 @@ namespace tools {
 ///
 /// @note The minimum sphere count takes precedence over the minimum radius.
 template<typename GridT, typename InterrupterT = util::NullInterrupter>
-inline void
+void
 fillWithSpheres(
     const GridT& grid,
     std::vector<openvdb::Vec4s>& spheres,
     const Vec2i& sphereCount = Vec2i(1, 50),
-    bool overlapping = false,
-    float minRadius = 1.0,
-    float maxRadius = std::numeric_limits<float>::max(),
-    float isovalue = 0.0,
-    int instanceCount = 10000,
-    InterrupterT* interrupter = nullptr);
-
-
-/// @deprecated Use the @a sphereCount overload instead.
-template<typename GridT, typename InterrupterT = util::NullInterrupter>
-OPENVDB_DEPRECATED
-inline void
-fillWithSpheres(
-    const GridT& grid,
-    std::vector<openvdb::Vec4s>& spheres,
-    int maxSphereCount,
     bool overlapping = false,
     float minRadius = 1.0,
     float maxRadius = std::numeric_limits<float>::max(),
@@ -114,18 +99,18 @@ public:
     ///                     (0.5 is a good initial guess).
     /// @param interrupter  pointer to an object adhering to the util::NullInterrupter interface.
     template<typename InterrupterT = util::NullInterrupter>
-    static inline Ptr create(const GridT& grid, float isovalue = 0.0,
+    static Ptr create(const GridT& grid, float isovalue = 0.0,
         InterrupterT* interrupter = nullptr);
 
     /// @brief Compute the distance from each input point to its closest surface point.
     /// @param points       input list of points in world space
     /// @param distances    output list of closest surface point distances
-    inline bool search(const std::vector<Vec3R>& points, std::vector<float>& distances);
+    bool search(const std::vector<Vec3R>& points, std::vector<float>& distances);
 
     /// @brief Overwrite each input point with its closest surface point.
     /// @param points       input/output list of points in world space
     /// @param distances    output list of closest surface point distances
-    inline bool searchAndReplace(std::vector<Vec3R>& points, std::vector<float>& distances);
+    bool searchAndReplace(std::vector<Vec3R>& points, std::vector<float>& distances);
 
     /// @brief Tree accessor
     const Index32TreeT& indexTree() const { return *mIdxTreePt; }
@@ -146,8 +131,8 @@ private:
 
     ClosestSurfacePoint() = default;
     template<typename InterrupterT = util::NullInterrupter>
-    inline bool initialize(const GridT&, float isovalue, InterrupterT*);
-    inline bool search(std::vector<Vec3R>&, std::vector<float>&, bool transformPoints);
+    bool initialize(const GridT&, float isovalue, InterrupterT*);
+    bool search(std::vector<Vec3R>&, std::vector<float>&, bool transformPoints);
 };
 
 
@@ -155,6 +140,8 @@ private:
 
 
 // Internal utility methods
+
+/// @cond OPENVDB_DOCS_INTERNAL
 
 namespace v2s_internal {
 
@@ -638,30 +625,13 @@ UpdatePoints::operator()(const tbb::blocked_range<size_t>& range)
 
 } // namespace v2s_internal
 
+/// @endcond
 
 ////////////////////////////////////////
 
 
 template<typename GridT, typename InterrupterT>
-inline void
-fillWithSpheres(
-    const GridT& grid,
-    std::vector<openvdb::Vec4s>& spheres,
-    int maxSphereCount,
-    bool overlapping,
-    float minRadius,
-    float maxRadius,
-    float isovalue,
-    int instanceCount,
-    InterrupterT* interrupter)
-{
-    fillWithSpheres(grid, spheres, Vec2i(1, maxSphereCount), overlapping,
-        minRadius, maxRadius, isovalue, instanceCount, interrupter);
-}
-
-
-template<typename GridT, typename InterrupterT>
-inline void
+void
 fillWithSpheres(
     const GridT& grid,
     std::vector<openvdb::Vec4s>& spheres,
@@ -758,11 +728,13 @@ fillWithSpheres(
         // use the uneroded mask instead.  (But if the minimum sphere count is zero,
         // then eroding away the mask is acceptable.)
         if (!addNarrowBandPoints || (minSphereCount <= 0)) {
-            erodeVoxels(interiorMaskPtr->tree(), 1);
+            tools::erodeActiveValues(interiorMaskPtr->tree(), /*iterations=*/1, tools::NN_FACE, tools::IGNORE_TILES);
+            tools::pruneInactive(interiorMaskPtr->tree());
         } else {
             auto& maskTree = interiorMaskPtr->tree();
             auto copyOfTree = StaticPtrCast<BoolTreeT>(maskTree.copy());
-            erodeVoxels(maskTree, 1);
+            tools::erodeActiveValues(maskTree, /*iterations=*/1, tools::NN_FACE, tools::IGNORE_TILES);
+            tools::pruneInactive(maskTree);
             if (maskTree.empty()) { interiorMaskPtr->setTree(copyOfTree); }
         }
 
@@ -852,7 +824,7 @@ fillWithSpheres(
 
 template<typename GridT>
 template<typename InterrupterT>
-inline typename ClosestSurfacePoint<GridT>::Ptr
+typename ClosestSurfacePoint<GridT>::Ptr
 ClosestSurfacePoint<GridT>::create(const GridT& grid, float isovalue, InterrupterT* interrupter)
 {
     auto csp = Ptr{new ClosestSurfacePoint};
@@ -863,7 +835,7 @@ ClosestSurfacePoint<GridT>::create(const GridT& grid, float isovalue, Interrupte
 
 template<typename GridT>
 template<typename InterrupterT>
-inline bool
+bool
 ClosestSurfacePoint<GridT>::initialize(
     const GridT& grid, float isovalue, InterrupterT* interrupter)
 {
@@ -987,7 +959,7 @@ ClosestSurfacePoint<GridT>::initialize(
 
 
 template<typename GridT>
-inline bool
+bool
 ClosestSurfacePoint<GridT>::search(std::vector<Vec3R>& points,
     std::vector<float>& distances, bool transformPoints)
 {
@@ -1005,7 +977,7 @@ ClosestSurfacePoint<GridT>::search(std::vector<Vec3R>& points,
 
 
 template<typename GridT>
-inline bool
+bool
 ClosestSurfacePoint<GridT>::search(const std::vector<Vec3R>& points, std::vector<float>& distances)
 {
     return search(const_cast<std::vector<Vec3R>& >(points), distances, false);
@@ -1013,12 +985,36 @@ ClosestSurfacePoint<GridT>::search(const std::vector<Vec3R>& points, std::vector
 
 
 template<typename GridT>
-inline bool
+bool
 ClosestSurfacePoint<GridT>::searchAndReplace(std::vector<Vec3R>& points,
     std::vector<float>& distances)
 {
     return search(points, distances, true);
 }
+
+
+////////////////////////////////////////
+
+
+// Explicit Template Instantiation
+
+#ifdef OPENVDB_USE_EXPLICIT_INSTANTIATION
+
+#ifdef OPENVDB_INSTANTIATE_VOLUMETOSPHERES
+#include <openvdb/util/ExplicitInstantiation.h>
+#endif
+
+OPENVDB_INSTANTIATE_CLASS ClosestSurfacePoint<FloatGrid>;
+OPENVDB_INSTANTIATE_CLASS ClosestSurfacePoint<DoubleGrid>;
+
+#define _FUNCTION(TreeT) \
+    void fillWithSpheres(const Grid<TreeT>&, std::vector<openvdb::Vec4s>&, const Vec2i&, \
+        bool, float, float, float, int, util::NullInterrupter*)
+OPENVDB_REAL_TREE_INSTANTIATE(_FUNCTION)
+#undef _FUNCTION
+
+#endif // OPENVDB_USE_EXPLICIT_INSTANTIATION
+
 
 } // namespace tools
 } // namespace OPENVDB_VERSION_NAME

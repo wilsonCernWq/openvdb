@@ -1,45 +1,25 @@
 // Copyright Contributors to the OpenVDB Project
 // SPDX-License-Identifier: MPL-2.0
 
-#include <cppunit/extensions/HelperMacros.h>
-
+#include <openvdb/io/TempFile.h>
 #include <openvdb/points/PointDataGrid.h>
 #include <openvdb/points/PointAttribute.h>
 #include <openvdb/points/PointConversion.h>
 #include <openvdb/points/PointCount.h>
 #include <openvdb/points/PointGroup.h>
 
-#ifdef _MSC_VER
-#include <windows.h>
-#endif
+#include <gtest/gtest.h>
+
 
 using namespace openvdb;
 using namespace openvdb::points;
 
-class TestPointConversion: public CppUnit::TestCase
+class TestPointConversion: public ::testing::Test
 {
 public:
-    void setUp() override { openvdb::initialize(); }
-    void tearDown() override { openvdb::uninitialize(); }
-
-    CPPUNIT_TEST_SUITE(TestPointConversion);
-    CPPUNIT_TEST(testPointConversion);
-    CPPUNIT_TEST(testPointConversionNans);
-    CPPUNIT_TEST(testStride);
-    CPPUNIT_TEST(testComputeVoxelSize);
-    CPPUNIT_TEST(testPrecision);
-
-    CPPUNIT_TEST_SUITE_END();
-
-    void testPointConversion();
-    void testPointConversionNans();
-    void testStride();
-    void testComputeVoxelSize();
-    void testPrecision();
-
+    void SetUp() override { openvdb::initialize(); }
+    void TearDown() override { openvdb::uninitialize(); }
 }; // class TestPointConversion
-
-CPPUNIT_TEST_SUITE_REGISTRATION(TestPointConversion);
 
 
 // Simple Attribute Wrapper
@@ -207,8 +187,7 @@ genPoints(const int numPoints, const double scale, const bool stride,
 ////////////////////////////////////////
 
 
-void
-TestPointConversion::testPointConversion()
+TEST_F(TestPointConversion, testPointConversion)
 {
     // generate points
 
@@ -224,11 +203,11 @@ TestPointConversion::testPointConversion()
     genPoints(count, /*scale=*/ 100.0, /*stride=*/false,
                 position, xyz, id, uniform, string, group);
 
-    CPPUNIT_ASSERT_EQUAL(position.size(), count);
-    CPPUNIT_ASSERT_EQUAL(id.size(), count);
-    CPPUNIT_ASSERT_EQUAL(uniform.size(), count);
-    CPPUNIT_ASSERT_EQUAL(string.size(), count);
-    CPPUNIT_ASSERT_EQUAL(group.size(), count);
+    EXPECT_EQ(position.size(), count);
+    EXPECT_EQ(id.size(), count);
+    EXPECT_EQ(uniform.size(), count);
+    EXPECT_EQ(string.size(), count);
+    EXPECT_EQ(group.size(), count);
 
     // convert point positions into a Point Data Grid
 
@@ -271,24 +250,12 @@ TestPointConversion::testPointConversion()
     appendGroup(tree, "test");
     setGroup(tree, indexTree, group.buffer(), "test");
 
-    CPPUNIT_ASSERT_EQUAL(indexTree.leafCount(), tree.leafCount());
+    EXPECT_EQ(indexTree.leafCount(), tree.leafCount());
 
     // read/write grid to a temp file
 
-    std::string tempDir;
-    if (const char* dir = std::getenv("TMPDIR")) tempDir = dir;
-#ifdef _MSC_VER
-    if (tempDir.empty()) {
-        char tempDirBuffer[MAX_PATH+1];
-        int tempDirLen = GetTempPath(MAX_PATH+1, tempDirBuffer);
-        CPPUNIT_ASSERT(tempDirLen > 0 && tempDirLen <= MAX_PATH);
-        tempDir = tempDirBuffer;
-    }
-#else
-    if (tempDir.empty()) tempDir = P_tmpdir;
-#endif
-
-    std::string filename = tempDir + "/openvdb_test_point_conversion";
+    io::TempFile file;
+    const std::string filename = file.filename();
 
     io::File fileOut(filename);
 
@@ -306,7 +273,7 @@ TestPointConversion::testPointConversion()
 
     fileIn.close();
 
-    CPPUNIT_ASSERT_EQUAL(readGrids->size(), size_t(1));
+    EXPECT_EQ(readGrids->size(), size_t(1));
 
     pointDataGrid = GridBase::grid<PointDataGrid>((*readGrids)[0]);
     PointDataTree& inputTree = pointDataGrid->tree();
@@ -315,12 +282,12 @@ TestPointConversion::testPointConversion()
 
     PointDataTree::LeafCIter leafCIter = inputTree.cbeginLeaf();
 
-    CPPUNIT_ASSERT_EQUAL(5, int(leafCIter->attributeSet().size()));
+    EXPECT_EQ(5, int(leafCIter->attributeSet().size()));
 
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("id") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("uniform") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("P") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("string") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("id") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("uniform") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("P") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("string") != AttributeSet::INVALID_POS);
 
     const auto idIndex = static_cast<Index>(leafCIter->attributeSet().find("id"));
     const auto uniformIndex = static_cast<Index>(leafCIter->attributeSet().find("uniform"));
@@ -377,13 +344,13 @@ TestPointConversion::testPointConversion()
 
     for (unsigned int i = 0; i < count; i++)
     {
-        CPPUNIT_ASSERT_EQUAL(id.buffer()[i], pointData[i].id);
-        CPPUNIT_ASSERT_EQUAL(group.buffer()[i], pointData[i].group);
-        CPPUNIT_ASSERT_EQUAL(uniform.buffer()[i], pointData[i].uniform);
-        CPPUNIT_ASSERT_EQUAL(string.buffer()[i], pointData[i].string);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
+        EXPECT_EQ(id.buffer()[i], pointData[i].id);
+        EXPECT_EQ(group.buffer()[i], pointData[i].group);
+        EXPECT_EQ(uniform.buffer()[i], pointData[i].uniform);
+        EXPECT_EQ(string.buffer()[i], pointData[i].string);
+        EXPECT_NEAR(position.buffer()[i].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[i].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[i].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
     }
 
     // convert based on even group
@@ -408,11 +375,11 @@ TestPointConversion::testPointConversion()
     convertPointDataGridAttribute(outputString, inputTree, offsets, startOffset, stringIndex, /*stride*/1, filter2);
     convertPointDataGridGroup(outputGroup, inputTree, offsets, startOffset, groupIndex, filter2);
 
-    CPPUNIT_ASSERT_EQUAL(size_t(outputPosition.size() - startOffset), size_t(halfCount));
-    CPPUNIT_ASSERT_EQUAL(size_t(outputId.size() - startOffset), size_t(halfCount));
-    CPPUNIT_ASSERT_EQUAL(size_t(outputUniform.size() - startOffset), size_t(halfCount));
-    CPPUNIT_ASSERT_EQUAL(size_t(outputString.size() - startOffset), size_t(halfCount));
-    CPPUNIT_ASSERT_EQUAL(size_t(outputGroup.size() - startOffset), size_t(halfCount));
+    EXPECT_EQ(size_t(outputPosition.size() - startOffset), size_t(halfCount));
+    EXPECT_EQ(size_t(outputId.size() - startOffset), size_t(halfCount));
+    EXPECT_EQ(size_t(outputUniform.size() - startOffset), size_t(halfCount));
+    EXPECT_EQ(size_t(outputString.size() - startOffset), size_t(halfCount));
+    EXPECT_EQ(size_t(outputGroup.size() - startOffset), size_t(halfCount));
 
     pointData.clear();
 
@@ -432,15 +399,16 @@ TestPointConversion::testPointConversion()
 
     for (unsigned int i = 0; i < halfCount; i++)
     {
-        CPPUNIT_ASSERT_EQUAL(id.buffer()[i*2], pointData[i].id);
-        CPPUNIT_ASSERT_EQUAL(group.buffer()[i*2], pointData[i].group);
-        CPPUNIT_ASSERT_EQUAL(uniform.buffer()[i*2], pointData[i].uniform);
-        CPPUNIT_ASSERT_EQUAL(string.buffer()[i*2], pointData[i].string);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i*2].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i*2].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i*2].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
+        EXPECT_EQ(id.buffer()[i*2], pointData[i].id);
+        EXPECT_EQ(group.buffer()[i*2], pointData[i].group);
+        EXPECT_EQ(uniform.buffer()[i*2], pointData[i].uniform);
+        EXPECT_EQ(string.buffer()[i*2], pointData[i].string);
+        EXPECT_NEAR(position.buffer()[i*2].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[i*2].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[i*2].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
     }
 
+    file.close();
     std::remove(filename.c_str());
 }
 
@@ -448,8 +416,7 @@ TestPointConversion::testPointConversion()
 ////////////////////////////////////////
 
 
-void
-TestPointConversion::testPointConversionNans()
+TEST_F(TestPointConversion, testPointConversionNans)
 {
     // generate points
 
@@ -471,16 +438,16 @@ TestPointConversion::testPointConversionNans()
 
     AttributeWrapper<Vec3f>::Handle positionHandle(position);
     const Vec3f nanPos(std::nan("0"));
-    CPPUNIT_ASSERT(nanPos.isNan());
+    EXPECT_TRUE(nanPos.isNan());
     for (const int& idx : nanIndices) {
         positionHandle.set(idx, /*stride*/0, nanPos);
     }
 
-    CPPUNIT_ASSERT_EQUAL(count, position.size());
-    CPPUNIT_ASSERT_EQUAL(count, id.size());
-    CPPUNIT_ASSERT_EQUAL(count, uniform.size());
-    CPPUNIT_ASSERT_EQUAL(count, string.size());
-    CPPUNIT_ASSERT_EQUAL(count, group.size());
+    EXPECT_EQ(count, position.size());
+    EXPECT_EQ(count, id.size());
+    EXPECT_EQ(count, uniform.size());
+    EXPECT_EQ(count, string.size());
+    EXPECT_EQ(count, group.size());
 
     // convert point positions into a Point Data Grid
 
@@ -495,7 +462,7 @@ TestPointConversion::testPointConversionNans()
 
     // set expected point count to the total minus the number of nan positions
     const size_t expected = count - nanIndices.size();
-    CPPUNIT_ASSERT_EQUAL(expected, static_cast<size_t>(pointCount(tree)));
+    EXPECT_EQ(expected, static_cast<size_t>(pointCount(tree)));
 
     // add id and populate
 
@@ -522,12 +489,12 @@ TestPointConversion::testPointConversionNans()
 
     const auto leafCIter = tree.cbeginLeaf();
 
-    CPPUNIT_ASSERT_EQUAL(5, int(leafCIter->attributeSet().size()));
+    EXPECT_EQ(5, int(leafCIter->attributeSet().size()));
 
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("id") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("uniform") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("P") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("string") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("id") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("uniform") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("P") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("string") != AttributeSet::INVALID_POS);
 
     const auto idIndex = static_cast<Index>(leafCIter->attributeSet().find("id"));
     const auto uniformIndex = static_cast<Index>(leafCIter->attributeSet().find("uniform"));
@@ -582,13 +549,13 @@ TestPointConversion::testPointConversionNans()
             if (int(iOffset) >= idx) iOffset += 1;
         }
 
-        CPPUNIT_ASSERT_EQUAL(id.buffer()[iOffset], pointData[i].id);
-        CPPUNIT_ASSERT_EQUAL(group.buffer()[iOffset], pointData[i].group);
-        CPPUNIT_ASSERT_EQUAL(uniform.buffer()[iOffset], pointData[i].uniform);
-        CPPUNIT_ASSERT_EQUAL(string.buffer()[iOffset], pointData[i].string);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[iOffset].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[iOffset].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[iOffset].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
+        EXPECT_EQ(id.buffer()[iOffset], pointData[i].id);
+        EXPECT_EQ(group.buffer()[iOffset], pointData[i].group);
+        EXPECT_EQ(uniform.buffer()[iOffset], pointData[i].uniform);
+        EXPECT_EQ(string.buffer()[iOffset], pointData[i].string);
+        EXPECT_NEAR(position.buffer()[iOffset].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[iOffset].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[iOffset].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
     }
 }
 
@@ -596,8 +563,7 @@ TestPointConversion::testPointConversionNans()
 ////////////////////////////////////////
 
 
-void
-TestPointConversion::testStride()
+TEST_F(TestPointConversion, testStride)
 {
     // generate points
 
@@ -613,9 +579,9 @@ TestPointConversion::testStride()
     genPoints(count, /*scale=*/ 100.0, /*stride=*/true,
                 position, xyz, id, uniform, string, group);
 
-    CPPUNIT_ASSERT_EQUAL(position.size(), count);
-    CPPUNIT_ASSERT_EQUAL(xyz.size(), count*3);
-    CPPUNIT_ASSERT_EQUAL(id.size(), count);
+    EXPECT_EQ(position.size(), count);
+    EXPECT_EQ(xyz.size(), count*3);
+    EXPECT_EQ(id.size(), count);
 
     // convert point positions into a Point Data Grid
 
@@ -642,11 +608,11 @@ TestPointConversion::testStride()
 
     PointDataTree::LeafCIter leafCIter = tree.cbeginLeaf();
 
-    CPPUNIT_ASSERT_EQUAL(3, int(leafCIter->attributeSet().size()));
+    EXPECT_EQ(3, int(leafCIter->attributeSet().size()));
 
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("id") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("P") != AttributeSet::INVALID_POS);
-    CPPUNIT_ASSERT(leafCIter->attributeSet().find("xyz") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("id") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("P") != AttributeSet::INVALID_POS);
+    EXPECT_TRUE(leafCIter->attributeSet().find("xyz") != AttributeSet::INVALID_POS);
 
     const auto idIndex = static_cast<Index>(leafCIter->attributeSet().find("id"));
     const auto xyzIndex = static_cast<Index>(leafCIter->attributeSet().find("xyz"));
@@ -692,11 +658,11 @@ TestPointConversion::testStride()
 
     for (unsigned int i = 0; i < count; i++)
     {
-        CPPUNIT_ASSERT_EQUAL(id.buffer()[i], pointData[i].id);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(position.buffer()[i].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
-        CPPUNIT_ASSERT_EQUAL(Vec3i(xyz.buffer()[i*3], xyz.buffer()[i*3+1], xyz.buffer()[i*3+2]), pointData[i].xyz);
+        EXPECT_EQ(id.buffer()[i], pointData[i].id);
+        EXPECT_NEAR(position.buffer()[i].x(), pointData[i].position.x(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[i].y(), pointData[i].position.y(), /*tolerance=*/1e-6);
+        EXPECT_NEAR(position.buffer()[i].z(), pointData[i].position.z(), /*tolerance=*/1e-6);
+        EXPECT_EQ(Vec3i(xyz.buffer()[i*3], xyz.buffer()[i*3+1], xyz.buffer()[i*3+2]), pointData[i].xyz);
     }
 }
 
@@ -704,8 +670,7 @@ TestPointConversion::testStride()
 ////////////////////////////////////////
 
 
-void
-TestPointConversion::testComputeVoxelSize()
+TEST_F(TestPointConversion, testComputeVoxelSize)
 {
     struct Local {
 
@@ -730,7 +695,7 @@ TestPointConversion::testComputeVoxelSize()
 
     {
         const float voxelSize = computeVoxelSize(position, /*points per voxel*/8);
-        CPPUNIT_ASSERT_EQUAL(voxelSize, 0.1f);
+        EXPECT_EQ(voxelSize, 0.1f);
     }
 
     // test with one point
@@ -741,7 +706,7 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(0, 0, Vec3f(0.0f));
 
         const float voxelSize = computeVoxelSize(position, /*points per voxel*/8);
-        CPPUNIT_ASSERT_EQUAL(voxelSize, 0.1f);
+        EXPECT_EQ(voxelSize, 0.1f);
     }
 
     // test with n points, where n > 1 && n <= num points per voxel
@@ -756,21 +721,21 @@ TestPointConversion::testComputeVoxelSize()
             positionHandle.set(i, 0, Vec3f(0.0f));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/8);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(18.5528f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(18.5528f, voxelSize, /*tolerance=*/1e-4);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(5.51306f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(5.51306f, voxelSize, /*tolerance=*/1e-4);
 
         // test decimal place accuracy
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 10);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(5.5130610466f, voxelSize, /*tolerance=*/1e-9);
+        EXPECT_NEAR(5.5130610466f, voxelSize, /*tolerance=*/1e-9);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 1);
-        CPPUNIT_ASSERT_EQUAL(5.5f, voxelSize);
+        EXPECT_EQ(5.5f, voxelSize);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 0);
-        CPPUNIT_ASSERT_EQUAL(6.0f, voxelSize);
+        EXPECT_EQ(6.0f, voxelSize);
     }
 
     // test coplanar points (Y=0)
@@ -785,10 +750,10 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(4, 0, Vec3f(10.0f, 0.0f, 0.0f));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/5);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(20.0f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(20.0f, voxelSize, /*tolerance=*/1e-4);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(11.696f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(11.696f, voxelSize, /*tolerance=*/1e-4);
     }
 
     // test collinear points (X=0, Y=0)
@@ -803,10 +768,10 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(4, 0, Vec3f(0.0f, 0.0f, 0.0f));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/5);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(20.0f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(20.0f, voxelSize, /*tolerance=*/1e-4);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(8.32034f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(8.32034f, voxelSize, /*tolerance=*/1e-4);
     }
 
     // test min limit collinear points (X=0, Y=0, Z=+/-float min)
@@ -818,10 +783,10 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(1, 0, Vec3f(0.0f, 0.0f, std::numeric_limits<float>::min()));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/2);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(minimumVoxelSize, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(minimumVoxelSize, voxelSize, /*tolerance=*/1e-4);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(minimumVoxelSize, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(minimumVoxelSize, voxelSize, /*tolerance=*/1e-4);
     }
 
     // test max limit collinear points (X=+/-float max, Y=0, Z=0)
@@ -833,10 +798,10 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(1, 0, Vec3f(std::numeric_limits<float>::max(), 0.0f, 0.0f));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/2);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(maximumVoxelSize, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(maximumVoxelSize, voxelSize, /*tolerance=*/1e-4);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(maximumVoxelSize, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(maximumVoxelSize, voxelSize, /*tolerance=*/1e-4);
     }
 
     // max pointsPerVoxel
@@ -848,7 +813,7 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(1, 0, Vec3f(1));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/std::numeric_limits<uint32_t>::max());
-        CPPUNIT_ASSERT_EQUAL(voxelSize, 1.0f);
+        EXPECT_EQ(voxelSize, 1.0f);
     }
 
     // limits test
@@ -860,7 +825,7 @@ TestPointConversion::testComputeVoxelSize()
         positionHandleD.set(1, 0, Vec3d(std::numeric_limits<double>::max()));
 
         float voxelSize = computeVoxelSize(positionD, /*points per voxel*/2);
-        CPPUNIT_ASSERT_EQUAL(voxelSize, maximumVoxelSize);
+        EXPECT_EQ(voxelSize, maximumVoxelSize);
     }
 
     {
@@ -874,13 +839,13 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(3, 0, Vec3f(smallest, 0.0f, smallest));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/4);
-        CPPUNIT_ASSERT_EQUAL(voxelSize, minimumVoxelSize);
+        EXPECT_EQ(voxelSize, minimumVoxelSize);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(minimumVoxelSize, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(minimumVoxelSize, voxelSize, /*tolerance=*/1e-4);
 
         PointDataGrid::Ptr grid = Local::genPointsGrid(voxelSize, position);
-        CPPUNIT_ASSERT_EQUAL(grid->activeVoxelCount(), Index64(1));
+        EXPECT_EQ(grid->activeVoxelCount(), Index64(1));
     }
 
     // the smallest possible vector extent that can exist from an input set
@@ -894,7 +859,7 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(1, 0, Vec3f(math::Tolerance<Real>::value() + std::numeric_limits<Real>::min()));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_EQUAL(voxelSize, minimumVoxelSize);
+        EXPECT_EQ(voxelSize, minimumVoxelSize);
     }
 
     // in-between smallest extent and ScaleMap determinant test
@@ -906,7 +871,7 @@ TestPointConversion::testComputeVoxelSize()
         positionHandle.set(1, 0, Vec3f(math::Tolerance<Real>::value()*1e8 + std::numeric_limits<Real>::min()));
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_EQUAL(voxelSize, float(math::Pow(double(3e-15), 1.0/3.0)));
+        EXPECT_EQ(voxelSize, float(math::Pow(double(3e-15), 1.0/3.0)));
     }
 
     {
@@ -922,18 +887,18 @@ TestPointConversion::testComputeVoxelSize()
         }
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/10);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(0.00012f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(0.00012f, voxelSize, /*tolerance=*/1e-4);
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(2e-5, voxelSize, /*tolerance=*/1e-6);
+        EXPECT_NEAR(2e-5, voxelSize, /*tolerance=*/1e-6);
 
         PointDataGrid::Ptr grid = Local::genPointsGrid(voxelSize, position);
-        CPPUNIT_ASSERT_EQUAL(grid->activeVoxelCount(), Index64(150001));
+        EXPECT_EQ(grid->activeVoxelCount(), Index64(150001));
 
         // check zero decimal place still returns valid result
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1, math::Mat4d::identity(), 0);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(2e-5, voxelSize, /*tolerance=*/1e-6);
+        EXPECT_NEAR(2e-5, voxelSize, /*tolerance=*/1e-6);
     }
 
     // random position generation within two bounds of equal size.
@@ -963,12 +928,12 @@ TestPointConversion::testComputeVoxelSize()
         }
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(0.00052f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(0.00052f, voxelSize, /*tolerance=*/1e-4);
 
         PointDataGrid::Ptr grid = Local::genPointsGrid(voxelSize, position);
         const auto pointsPerVoxel = static_cast<Index64>(
             math::Round(2000.0f / static_cast<float>(grid->activeVoxelCount())));
-        CPPUNIT_ASSERT_EQUAL(pointsPerVoxel, Index64(1));
+        EXPECT_EQ(pointsPerVoxel, Index64(1));
     }
 
     // random position generation within three bounds of varying size.
@@ -1006,20 +971,20 @@ TestPointConversion::testComputeVoxelSize()
         }
 
         float voxelSize = computeVoxelSize(position, /*points per voxel*/10);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(0.24758f, voxelSize, /*tolerance=*/1e-3);
+        EXPECT_NEAR(0.24758f, voxelSize, /*tolerance=*/1e-3);
 
         PointDataGrid::Ptr grid = Local::genPointsGrid(voxelSize, position);
         auto pointsPerVoxel = static_cast<Index64>(
             math::Round(3000.0f/ static_cast<float>(grid->activeVoxelCount())));
-        CPPUNIT_ASSERT(math::isApproxEqual(pointsPerVoxel, Index64(10), Index64(2)));
+        EXPECT_TRUE(math::isApproxEqual(pointsPerVoxel, Index64(10), Index64(2)));
 
         voxelSize = computeVoxelSize(position, /*points per voxel*/1);
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(0.00231f, voxelSize, /*tolerance=*/1e-4);
+        EXPECT_NEAR(0.00231f, voxelSize, /*tolerance=*/1e-4);
 
         grid = Local::genPointsGrid(voxelSize, position);
         pointsPerVoxel = static_cast<Index64>(
             math::Round(3000.0f/ static_cast<float>(grid->activeVoxelCount())));
-        CPPUNIT_ASSERT_EQUAL(pointsPerVoxel, Index64(1));
+        EXPECT_EQ(pointsPerVoxel, Index64(1));
     }
 
     // Generate a sphere
@@ -1037,22 +1002,22 @@ TestPointConversion::testComputeVoxelSize()
 
     genPoints(count, /*scale=*/ 100.0, /*stride=*/false, position, xyz, id, uniform, string, group);
 
-    CPPUNIT_ASSERT_EQUAL(position.size(), count);
-    CPPUNIT_ASSERT_EQUAL(id.size(), count);
-    CPPUNIT_ASSERT_EQUAL(uniform.size(), count);
-    CPPUNIT_ASSERT_EQUAL(string.size(), count);
-    CPPUNIT_ASSERT_EQUAL(group.size(), count);
+    EXPECT_EQ(position.size(), count);
+    EXPECT_EQ(id.size(), count);
+    EXPECT_EQ(uniform.size(), count);
+    EXPECT_EQ(string.size(), count);
+    EXPECT_EQ(group.size(), count);
 
     // test a distributed point set around a sphere
 
     {
         const float voxelSize = computeVoxelSize(position, /*points per voxel*/2);
 
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(2.6275f, voxelSize, /*tolerance=*/0.01);
+        EXPECT_NEAR(2.6275f, voxelSize, /*tolerance=*/0.01);
 
         PointDataGrid::Ptr grid = Local::genPointsGrid(voxelSize, position);
         const Index64 pointsPerVoxel = count / grid->activeVoxelCount();
-        CPPUNIT_ASSERT_EQUAL(pointsPerVoxel, Index64(2));
+        EXPECT_EQ(pointsPerVoxel, Index64(2));
     }
 
     // test with given target transforms
@@ -1065,15 +1030,15 @@ TestPointConversion::testComputeVoxelSize()
 
         math::UniformScaleMap::ConstPtr scaleMap1 = transform1->constMap<math::UniformScaleMap>();
         math::UniformScaleMap::ConstPtr scaleMap2 = transform2->constMap<math::UniformScaleMap>();
-        CPPUNIT_ASSERT(scaleMap1.get());
-        CPPUNIT_ASSERT(scaleMap2.get());
+        EXPECT_TRUE(scaleMap1.get());
+        EXPECT_TRUE(scaleMap2.get());
 
         math::AffineMap::ConstPtr affineMap1 = scaleMap1->getAffineMap();
         math::AffineMap::ConstPtr affineMap2 = scaleMap2->getAffineMap();
 
         float voxelSize1 = computeVoxelSize(position, /*points per voxel*/2, affineMap1->getMat4());
         float voxelSize2 = computeVoxelSize(position, /*points per voxel*/2, affineMap2->getMat4());
-        CPPUNIT_ASSERT_EQUAL(voxelSize1, voxelSize2);
+        EXPECT_EQ(voxelSize1, voxelSize2);
 
         // test that applying a rotation roughly calculates to the same result for this example
         // NOTE: distribution is not uniform
@@ -1085,24 +1050,23 @@ TestPointConversion::testComputeVoxelSize()
         transform1->postRotate(M_PI / 4.0, math::Z_AXIS);
 
         affineMap1 = transform1->constMap<math::AffineMap>();
-        CPPUNIT_ASSERT(affineMap1.get());
+        EXPECT_TRUE(affineMap1.get());
 
         float voxelSize3 = computeVoxelSize(position, /*points per voxel*/2, affineMap1->getMat4());
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize1, voxelSize3, 0.1);
+        EXPECT_NEAR(voxelSize1, voxelSize3, 0.1);
 
         // test that applying a translation roughly calculates to the same result for this example
 
         transform1->postTranslate(Vec3d(-5.0f, 3.3f, 20.1f));
         affineMap1 = transform1->constMap<math::AffineMap>();
-        CPPUNIT_ASSERT(affineMap1.get());
+        EXPECT_TRUE(affineMap1.get());
 
         float voxelSize4 = computeVoxelSize(position, /*points per voxel*/2, affineMap1->getMat4());
-        CPPUNIT_ASSERT_DOUBLES_EQUAL(voxelSize1, voxelSize4, 0.1);
+        EXPECT_NEAR(voxelSize1, voxelSize4, 0.1);
     }
 }
 
-void
-TestPointConversion::testPrecision()
+TEST_F(TestPointConversion, testPrecision)
 {
     const double tolerance = math::Tolerance<float>::value();
 
@@ -1135,23 +1099,23 @@ TestPointConversion::testPrecision()
 
             const auto& ijk = indexIter.getCoord();
 
-            CPPUNIT_ASSERT_EQUAL(ijk.x(), 2000);
-            CPPUNIT_ASSERT_EQUAL(ijk.y(), 2001);
-            CPPUNIT_ASSERT_EQUAL(ijk.z(), 2001); // on border value is stored in the higher voxel
+            EXPECT_EQ(ijk.x(), 2000);
+            EXPECT_EQ(ijk.y(), 2001);
+            EXPECT_EQ(ijk.z(), 2001); // on border value is stored in the higher voxel
 
             const Vec3f positionVoxelSpace = handle.get(*indexIter);
 
             // voxel-space range: -0.5f >= value > 0.5f
 
-            CPPUNIT_ASSERT(positionVoxelSpace.x() > 0.49f && positionVoxelSpace.x() < 0.5f);
-            CPPUNIT_ASSERT(positionVoxelSpace.y() > -0.5f && positionVoxelSpace.y() < -0.49f);
-            CPPUNIT_ASSERT(positionVoxelSpace.z() == -0.5f); // on border value is stored at -0.5f
+            EXPECT_TRUE(positionVoxelSpace.x() > 0.49f && positionVoxelSpace.x() < 0.5f);
+            EXPECT_TRUE(positionVoxelSpace.y() > -0.5f && positionVoxelSpace.y() < -0.49f);
+            EXPECT_TRUE(positionVoxelSpace.z() == -0.5f); // on border value is stored at -0.5f
 
             positionAfterNull = Vec3f(transform->indexToWorld(positionVoxelSpace + ijk.asVec3d()));
 
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterNull.x(), positionBefore.x(), tolerance);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterNull.y(), positionBefore.y(), tolerance);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterNull.z(), positionBefore.z(), tolerance);
+            EXPECT_NEAR(positionAfterNull.x(), positionBefore.x(), tolerance);
+            EXPECT_NEAR(positionAfterNull.y(), positionBefore.y(), tolerance);
+            EXPECT_NEAR(positionAfterNull.z(), positionBefore.z(), tolerance);
         }
 
         { // fixed 16-bit codec
@@ -1164,31 +1128,31 @@ TestPointConversion::testPrecision()
 
             const auto& ijk = indexIter.getCoord();
 
-            CPPUNIT_ASSERT_EQUAL(ijk.x(), 2000);
-            CPPUNIT_ASSERT_EQUAL(ijk.y(), 2001);
-            CPPUNIT_ASSERT_EQUAL(ijk.z(), 2001); // on border value is stored in the higher voxel
+            EXPECT_EQ(ijk.x(), 2000);
+            EXPECT_EQ(ijk.y(), 2001);
+            EXPECT_EQ(ijk.z(), 2001); // on border value is stored in the higher voxel
 
             const Vec3f positionVoxelSpace = handle.get(*indexIter);
 
             // voxel-space range: -0.5f >= value > 0.5f
 
-            CPPUNIT_ASSERT(positionVoxelSpace.x() > 0.49f && positionVoxelSpace.x() < 0.5f);
-            CPPUNIT_ASSERT(positionVoxelSpace.y() > -0.5f && positionVoxelSpace.y() < -0.49f);
-            CPPUNIT_ASSERT(positionVoxelSpace.z() == -0.5f); // on border value is stored at -0.5f
+            EXPECT_TRUE(positionVoxelSpace.x() > 0.49f && positionVoxelSpace.x() < 0.5f);
+            EXPECT_TRUE(positionVoxelSpace.y() > -0.5f && positionVoxelSpace.y() < -0.49f);
+            EXPECT_TRUE(positionVoxelSpace.z() == -0.5f); // on border value is stored at -0.5f
 
             positionAfterFixed16 = Vec3f(transform->indexToWorld(
                 positionVoxelSpace + ijk.asVec3d()));
 
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterFixed16.x(), positionBefore.x(), tolerance);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterFixed16.y(), positionBefore.y(), tolerance);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterFixed16.z(), positionBefore.z(), tolerance);
+            EXPECT_NEAR(positionAfterFixed16.x(), positionBefore.x(), tolerance);
+            EXPECT_NEAR(positionAfterFixed16.y(), positionBefore.y(), tolerance);
+            EXPECT_NEAR(positionAfterFixed16.z(), positionBefore.z(), tolerance);
         }
 
         // at this precision null codec == fixed-point 16-bit codec
 
-        CPPUNIT_ASSERT_EQUAL(positionAfterNull.x(), positionAfterFixed16.x());
-        CPPUNIT_ASSERT_EQUAL(positionAfterNull.y(), positionAfterFixed16.y());
-        CPPUNIT_ASSERT_EQUAL(positionAfterNull.z(), positionAfterFixed16.z());
+        EXPECT_EQ(positionAfterNull.x(), positionAfterFixed16.x());
+        EXPECT_EQ(positionAfterNull.y(), positionAfterFixed16.y());
+        EXPECT_EQ(positionAfterNull.z(), positionAfterFixed16.z());
     }
 
     { // test values near to origin
@@ -1220,23 +1184,23 @@ TestPointConversion::testPrecision()
 
             const auto& ijk = indexIter.getCoord();
 
-            CPPUNIT_ASSERT_EQUAL(ijk.x(), 0);
-            CPPUNIT_ASSERT_EQUAL(ijk.y(), 1);
-            CPPUNIT_ASSERT_EQUAL(ijk.z(), 1); // on border value is stored in the higher voxel
+            EXPECT_EQ(ijk.x(), 0);
+            EXPECT_EQ(ijk.y(), 1);
+            EXPECT_EQ(ijk.z(), 1); // on border value is stored in the higher voxel
 
             const Vec3f positionVoxelSpace = handle.get(*indexIter);
 
             // voxel-space range: -0.5f >= value > 0.5f
 
-            CPPUNIT_ASSERT(positionVoxelSpace.x() > 0.49f && positionVoxelSpace.x() < 0.5f);
-            CPPUNIT_ASSERT(positionVoxelSpace.y() > -0.5f && positionVoxelSpace.y() < -0.49f);
-            CPPUNIT_ASSERT(positionVoxelSpace.z() == -0.5f); // on border value is stored at -0.5f
+            EXPECT_TRUE(positionVoxelSpace.x() > 0.49f && positionVoxelSpace.x() < 0.5f);
+            EXPECT_TRUE(positionVoxelSpace.y() > -0.5f && positionVoxelSpace.y() < -0.49f);
+            EXPECT_TRUE(positionVoxelSpace.z() == -0.5f); // on border value is stored at -0.5f
 
             positionAfterNull = Vec3f(transform->indexToWorld(positionVoxelSpace + ijk.asVec3d()));
 
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterNull.x(), positionBefore.x(), tolerance);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterNull.y(), positionBefore.y(), tolerance);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterNull.z(), positionBefore.z(), tolerance);
+            EXPECT_NEAR(positionAfterNull.x(), positionBefore.x(), tolerance);
+            EXPECT_NEAR(positionAfterNull.y(), positionBefore.y(), tolerance);
+            EXPECT_NEAR(positionAfterNull.z(), positionBefore.z(), tolerance);
         }
 
         { // fixed 16-bit codec - at this precision, this codec results in lossy compression
@@ -1249,32 +1213,243 @@ TestPointConversion::testPrecision()
 
             const auto& ijk = indexIter.getCoord();
 
-            CPPUNIT_ASSERT_EQUAL(ijk.x(), 0);
-            CPPUNIT_ASSERT_EQUAL(ijk.y(), 1);
-            CPPUNIT_ASSERT_EQUAL(ijk.z(), 1); // on border value is stored in the higher voxel
+            EXPECT_EQ(ijk.x(), 0);
+            EXPECT_EQ(ijk.y(), 1);
+            EXPECT_EQ(ijk.z(), 1); // on border value is stored in the higher voxel
 
             const Vec3f positionVoxelSpace = handle.get(*indexIter);
 
             // voxel-space range: -0.5f >= value > 0.5f
 
-            CPPUNIT_ASSERT(positionVoxelSpace.x() == 0.5f); // before border is clamped to 0.5f
-            CPPUNIT_ASSERT(positionVoxelSpace.y() == -0.5f); // after border is clamped to -0.5f
-            CPPUNIT_ASSERT(positionVoxelSpace.z() == -0.5f); // on border is stored at -0.5f
+            EXPECT_TRUE(positionVoxelSpace.x() == 0.5f); // before border is clamped to 0.5f
+            EXPECT_TRUE(positionVoxelSpace.y() == -0.5f); // after border is clamped to -0.5f
+            EXPECT_TRUE(positionVoxelSpace.z() == -0.5f); // on border is stored at -0.5f
 
             positionAfterFixed16 = Vec3f(transform->indexToWorld(
                 positionVoxelSpace + ijk.asVec3d()));
 
             // reduce tolerance to handle lack of precision
 
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterFixed16.x(), positionBefore.x(), 1e-6);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterFixed16.y(), positionBefore.y(), 1e-6);
-            CPPUNIT_ASSERT_DOUBLES_EQUAL(positionAfterFixed16.z(), positionBefore.z(), tolerance);
+            EXPECT_NEAR(positionAfterFixed16.x(), positionBefore.x(), 1e-6);
+            EXPECT_NEAR(positionAfterFixed16.y(), positionBefore.y(), 1e-6);
+            EXPECT_NEAR(positionAfterFixed16.z(), positionBefore.z(), tolerance);
         }
 
         // only z matches precisely due to lossy compression
 
-        CPPUNIT_ASSERT(positionAfterNull.x() != positionAfterFixed16.x());
-        CPPUNIT_ASSERT(positionAfterNull.y() != positionAfterFixed16.y());
-        CPPUNIT_ASSERT_EQUAL(positionAfterNull.z(), positionAfterFixed16.z());
+        EXPECT_TRUE(positionAfterNull.x() != positionAfterFixed16.x());
+        EXPECT_TRUE(positionAfterNull.y() != positionAfterFixed16.y());
+        EXPECT_EQ(positionAfterNull.z(), positionAfterFixed16.z());
+    }
+}
+
+TEST_F(TestPointConversion, testExample)
+{
+    // this is the example from the documentation using both Vec3R and Vec3f
+
+    { // Vec3R
+        // Create a vector with four point positions.
+        std::vector<openvdb::Vec3R> positions;
+        positions.push_back(openvdb::Vec3R(0, 1, 0));
+        positions.push_back(openvdb::Vec3R(1.5, 3.5, 1));
+        positions.push_back(openvdb::Vec3R(-1, 6, -2));
+        positions.push_back(openvdb::Vec3R(1.1, 1.25, 0.06));
+
+        // The VDB Point-Partioner is used when bucketing points and requires a
+        // specific interface. For convenience, we use the PointAttributeVector
+        // wrapper around an stl vector wrapper here, however it is also possible to
+        // write one for a custom data structure in order to match the interface
+        // required.
+        openvdb::points::PointAttributeVector<openvdb::Vec3R> positionsWrapper(positions);
+
+        // This method computes a voxel-size to match the number of
+        // points / voxel requested. Although it won't be exact, it typically offers
+        // a good balance of memory against performance.
+        int pointsPerVoxel = 8;
+        float voxelSize =
+            openvdb::points::computeVoxelSize(positionsWrapper, pointsPerVoxel);
+
+        // Create a transform using this voxel-size.
+        openvdb::math::Transform::Ptr transform =
+            openvdb::math::Transform::createLinearTransform(voxelSize);
+
+        // Create a PointDataGrid containing these four points and using the
+        // transform given. This function has two template parameters, (1) the codec
+        // to use for storing the position, (2) the grid we want to create
+        // (ie a PointDataGrid).
+        // We use no compression here for the positions.
+        openvdb::points::PointDataGrid::Ptr grid =
+            openvdb::points::createPointDataGrid<openvdb::points::NullCodec,
+                            openvdb::points::PointDataGrid>(positions, *transform);
+
+        // Set the name of the grid
+        grid->setName("Points");
+
+        // Create a VDB file object and write out the grid.
+        openvdb::io::File("mypoints.vdb").write({grid});
+
+        // Create a new VDB file object for reading.
+        openvdb::io::File newFile("mypoints.vdb");
+
+        // Open the file. This reads the file header, but not any grids.
+        newFile.open();
+
+        // Read the grid by name.
+        openvdb::GridBase::Ptr baseGrid = newFile.readGrid("Points");
+        newFile.close();
+
+        // From the example above, "Points" is known to be a PointDataGrid,
+        // so cast the generic grid pointer to a PointDataGrid pointer.
+        grid = openvdb::gridPtrCast<openvdb::points::PointDataGrid>(baseGrid);
+
+        std::vector<Vec3R> resultingPositions;
+
+        // Iterate over all the leaf nodes in the grid.
+        for (auto leafIter = grid->tree().cbeginLeaf(); leafIter; ++leafIter) {
+
+            // Extract the position attribute from the leaf by name (P is position).
+            const openvdb::points::AttributeArray& array =
+                leafIter->constAttributeArray("P");
+
+            // Create a read-only AttributeHandle. Position always uses Vec3f.
+            openvdb::points::AttributeHandle<openvdb::Vec3f> positionHandle(array);
+
+            // Iterate over the point indices in the leaf.
+            for (auto indexIter = leafIter->beginIndexOn(); indexIter; ++indexIter) {
+
+                // Extract the voxel-space position of the point.
+                openvdb::Vec3f voxelPosition = positionHandle.get(*indexIter);
+
+                // Extract the index-space position of the voxel.
+                const openvdb::Vec3d xyz = indexIter.getCoord().asVec3d();
+
+                // Compute the world-space position of the point.
+                openvdb::Vec3f worldPosition =
+                    grid->transform().indexToWorld(voxelPosition + xyz);
+
+                resultingPositions.push_back(worldPosition);
+            }
+        }
+
+        EXPECT_EQ(size_t(4), resultingPositions.size());
+
+        // remap the position order
+
+        std::vector<size_t> remap;
+        remap.push_back(1);
+        remap.push_back(3);
+        remap.push_back(0);
+        remap.push_back(2);
+
+        for (int i = 0; i < 4; i++) {
+            EXPECT_NEAR(positions[i].x(), resultingPositions[remap[i]].x(), /*tolerance=*/1e-6);
+            EXPECT_NEAR(positions[i].y(), resultingPositions[remap[i]].y(), /*tolerance=*/1e-6);
+            EXPECT_NEAR(positions[i].z(), resultingPositions[remap[i]].z(), /*tolerance=*/1e-6);
+        }
+
+        remove("mypoints.vdb");
+    }
+
+    { // Vec3f
+        // Create a vector with four point positions.
+        std::vector<openvdb::Vec3f> positions;
+        positions.push_back(openvdb::Vec3f(0.0f, 1.0f, 0.0f));
+        positions.push_back(openvdb::Vec3f(1.5f, 3.5f, 1.0f));
+        positions.push_back(openvdb::Vec3f(-1.0f, 6.0f, -2.0f));
+        positions.push_back(openvdb::Vec3f(1.1f, 1.25f, 0.06f));
+
+        // The VDB Point-Partioner is used when bucketing points and requires a
+        // specific interface. For convenience, we use the PointAttributeVector
+        // wrapper around an stl vector wrapper here, however it is also possible to
+        // write one for a custom data structure in order to match the interface
+        // required.
+        openvdb::points::PointAttributeVector<openvdb::Vec3f> positionsWrapper(positions);
+
+        // This method computes a voxel-size to match the number of
+        // points / voxel requested. Although it won't be exact, it typically offers
+        // a good balance of memory against performance.
+        int pointsPerVoxel = 8;
+        float voxelSize =
+            openvdb::points::computeVoxelSize(positionsWrapper, pointsPerVoxel);
+
+        // Create a transform using this voxel-size.
+        openvdb::math::Transform::Ptr transform =
+            openvdb::math::Transform::createLinearTransform(voxelSize);
+
+        // Create a PointDataGrid containing these four points and using the
+        // transform given. This function has two template parameters, (1) the codec
+        // to use for storing the position, (2) the grid we want to create
+        // (ie a PointDataGrid).
+        // We use no compression here for the positions.
+        openvdb::points::PointDataGrid::Ptr grid =
+            openvdb::points::createPointDataGrid<openvdb::points::NullCodec,
+                            openvdb::points::PointDataGrid>(positions, *transform);
+
+        // Set the name of the grid
+        grid->setName("Points");
+
+        // Create a VDB file object and write out the grid.
+        openvdb::io::File("mypoints.vdb").write({grid});
+
+        // Create a new VDB file object for reading.
+        openvdb::io::File newFile("mypoints.vdb");
+
+        // Open the file. This reads the file header, but not any grids.
+        newFile.open();
+
+        // Read the grid by name.
+        openvdb::GridBase::Ptr baseGrid = newFile.readGrid("Points");
+        newFile.close();
+
+        // From the example above, "Points" is known to be a PointDataGrid,
+        // so cast the generic grid pointer to a PointDataGrid pointer.
+        grid = openvdb::gridPtrCast<openvdb::points::PointDataGrid>(baseGrid);
+
+        std::vector<Vec3f> resultingPositions;
+
+        // Iterate over all the leaf nodes in the grid.
+        for (auto leafIter = grid->tree().cbeginLeaf(); leafIter; ++leafIter) {
+
+            // Extract the position attribute from the leaf by name (P is position).
+            const openvdb::points::AttributeArray& array =
+                leafIter->constAttributeArray("P");
+
+            // Create a read-only AttributeHandle. Position always uses Vec3f.
+            openvdb::points::AttributeHandle<openvdb::Vec3f> positionHandle(array);
+
+            // Iterate over the point indices in the leaf.
+            for (auto indexIter = leafIter->beginIndexOn(); indexIter; ++indexIter) {
+
+                // Extract the voxel-space position of the point.
+                openvdb::Vec3f voxelPosition = positionHandle.get(*indexIter);
+
+                // Extract the index-space position of the voxel.
+                const openvdb::Vec3d xyz = indexIter.getCoord().asVec3d();
+
+                // Compute the world-space position of the point.
+                openvdb::Vec3f worldPosition =
+                    grid->transform().indexToWorld(voxelPosition + xyz);
+
+                resultingPositions.push_back(worldPosition);
+            }
+        }
+
+        EXPECT_EQ(size_t(4), resultingPositions.size());
+
+        // remap the position order
+
+        std::vector<size_t> remap;
+        remap.push_back(1);
+        remap.push_back(3);
+        remap.push_back(0);
+        remap.push_back(2);
+
+        for (int i = 0; i < 4; i++) {
+            EXPECT_NEAR(positions[i].x(), resultingPositions[remap[i]].x(), /*tolerance=*/1e-6f);
+            EXPECT_NEAR(positions[i].y(), resultingPositions[remap[i]].y(), /*tolerance=*/1e-6f);
+            EXPECT_NEAR(positions[i].z(), resultingPositions[remap[i]].z(), /*tolerance=*/1e-6f);
+        }
+
+        remove("mypoints.vdb");
     }
 }

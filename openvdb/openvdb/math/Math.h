@@ -48,6 +48,16 @@
     #define OPENVDB_NO_FP_EQUALITY_WARNING_END
 #endif
 
+
+#ifdef OPENVDB_IS_POD
+#undef OPENVDB_IS_POD
+#endif
+#define OPENVDB_IS_POD(Type) \
+static_assert(std::is_standard_layout<Type>::value, \
+    #Type" must be a POD type (satisfy StandardLayoutType.)"); \
+static_assert(std::is_trivial<Type>::value, \
+    #Type" must be a POD type (satisfy TrivialType.)");
+
 namespace openvdb {
 OPENVDB_USE_VERSION_NAMESPACE
 namespace OPENVDB_VERSION_NAME {
@@ -62,6 +72,8 @@ template<> inline std::string zeroVal<std::string>() { return ""; }
 /// Return the @c bool value that corresponds to zero.
 template<> inline bool zeroVal<bool>() { return false; }
 
+namespace math {
+
 /// @todo These won't be needed if we eliminate StringGrids.
 //@{
 /// @brief Needed to support the <tt>(zeroVal<ValueType>() + val)</tt> idiom
@@ -72,8 +84,33 @@ inline std::string operator+(const std::string& s, float) { return s; }
 inline std::string operator+(const std::string& s, double) { return s; }
 //@}
 
+/// @brief  Componentwise adder for POD types.
+template<typename Type1, typename Type2>
+inline auto cwiseAdd(const Type1& v, const Type2 s)
+{
+    OPENVDB_NO_TYPE_CONVERSION_WARNING_BEGIN
+    return v + s;
+    OPENVDB_NO_TYPE_CONVERSION_WARNING_END
+}
 
-namespace math {
+/// @brief  Componentwise less than for POD types.
+template<typename Type1, typename Type2>
+inline bool cwiseLessThan(const Type1& a, const Type2& b)
+{
+    OPENVDB_NO_TYPE_CONVERSION_WARNING_BEGIN
+    return a < b;
+    OPENVDB_NO_TYPE_CONVERSION_WARNING_END
+}
+
+/// @brief  Componentwise greater than for POD types.
+template<typename Type1, typename Type2>
+inline bool cwiseGreaterThan(const Type1& a, const Type2& b)
+{
+    OPENVDB_NO_TYPE_CONVERSION_WARNING_BEGIN
+    return a > b;
+    OPENVDB_NO_TYPE_CONVERSION_WARNING_END
+}
+
 
 
 /// @brief  Pi constant taken from Boost to match old behaviour
@@ -282,10 +319,10 @@ inline long double Abs(long double x) { return std::fabs(x); }
 inline uint32_t Abs(uint32_t i) { return i; }
 inline uint64_t Abs(uint64_t i) { return i; }
 inline bool Abs(bool b) { return b; }
-// On OSX size_t and uint64_t are different types
-#if defined(__APPLE__) || defined(MACOSX)
-inline size_t Abs(size_t i) { return i; }
-#endif
+// On systems like macOS and FreeBSD, size_t and uint64_t are different types
+template <typename T>
+inline typename std::enable_if<std::is_same<T, size_t>::value, T>::type
+Abs(T i) { return i; }
 //@}
 
 
@@ -364,6 +401,14 @@ inline bool
 isNan(const Type& x) { return std::isnan(static_cast<double>(x)); }
 
 
+/// Return @c true if @a a is equal to @a b to within the given tolerance.
+template<typename Type>
+inline bool
+isApproxEqual(const Type& a, const Type& b, const Type& tolerance)
+{
+    return !cwiseGreaterThan(Abs(a - b), tolerance);
+}
+
 /// @brief Return @c true if @a a is equal to @a b to within
 /// the default floating-point comparison tolerance.
 template<typename Type>
@@ -371,16 +416,7 @@ inline bool
 isApproxEqual(const Type& a, const Type& b)
 {
     const Type tolerance = Type(zeroVal<Type>() + Tolerance<Type>::value());
-    return !(Abs(a - b) > tolerance);
-}
-
-
-/// Return @c true if @a a is equal to @a b to within the given tolerance.
-template<typename Type>
-inline bool
-isApproxEqual(const Type& a, const Type& b, const Type& tolerance)
-{
-    return !(Abs(a - b) > tolerance);
+    return isApproxEqual(a, b, tolerance);
 }
 
 #define OPENVDB_EXACT_IS_APPROX_EQUAL(T) \
@@ -522,7 +558,7 @@ inline Type Pow3(Type x) { return x*x*x; }
 template<typename Type>
 inline Type Pow4(Type x) { return Pow2(Pow2(x)); }
 
-/// Return @a x<sup>@a n</sup>.
+/// Return @a x<sup>n</sup>.
 template<typename Type>
 Type
 Pow(Type x, int n)
@@ -537,7 +573,7 @@ Pow(Type x, int n)
 }
 
 //@{
-/// Return @a b<sup>@a e</sup>.
+/// Return @a b<sup>e</sup>.
 inline float
 Pow(float b, float e)
 {
@@ -672,7 +708,7 @@ Min(const Type& a, const Type& b, const Type& c, const Type& d,
 
 // ============> Exp <==================
 
-/// Return @a e<sup>@a x</sup>.
+/// Return @a e<sup>x</sup>.
 template<typename Type>
 inline Type Exp(const Type& x) { return std::exp(x); }
 
@@ -839,7 +875,6 @@ Truncate(Type x, unsigned int digits)
     Type tenth = Pow(10,digits);
     return RoundDown(x*tenth+0.5)/tenth;
 }
-
 
 ////////////////////////////////////////
 

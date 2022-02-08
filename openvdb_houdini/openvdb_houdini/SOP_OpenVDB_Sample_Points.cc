@@ -16,12 +16,10 @@
 #include <openvdb_houdini/SOP_NodeVDB.h>
 
 #include <openvdb/tools/Interpolation.h>  // for box sampler
+#include <openvdb/thread/Threading.h>
 #include <openvdb/points/PointCount.h>
 #include <openvdb/points/PointSample.h>
 #include <openvdb/points/IndexFilter.h>   // for MultiGroupFilter
-
-#include <tbb/tick_count.h>                 // for timing
-#include <tbb/task.h>                       // for cancel
 
 #include <UT/UT_Interrupt.h>
 #include <GA/GA_PageHandle.h>
@@ -38,6 +36,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <chrono>
 
 
 
@@ -184,7 +183,7 @@ struct VDBPointsSampler
     inline void
     pointSample(const hvdb::Grid& sourceGrid,
                 const std::string& attributeName,
-                hvdb::Interrupter* interrupter)
+                openvdb::util::NullInterrupter* interrupter)
     {
         warnOnExisting(attributeName);
         const GridType& grid = UTvdbGridCast<GridType>(sourceGrid);
@@ -201,7 +200,7 @@ struct VDBPointsSampler
     inline void
     boxSample(const hvdb::Grid& sourceGrid,
               const std::string& attributeName,
-              hvdb::Interrupter* interrupter)
+              openvdb::util::NullInterrupter* interrupter)
     {
         warnOnExisting(attributeName);
         const GridType& grid = UTvdbGridCast<GridType>(sourceGrid);
@@ -290,7 +289,7 @@ public:
     // constructor. from grid and GU_Detail*
     PointSampler(const hvdb::Grid& grid, const bool threaded,
                  GU_Detail* gdp, GA_RWAttributeRef& handle,
-                 hvdb::Interrupter* interrupter):
+                 openvdb::util::NullInterrupter* interrupter):
         mGrid(grid),
         mThreaded(threaded),
         mGdp(gdp),
@@ -327,7 +326,7 @@ public:
     {
 
         if (mInterrupter->wasInterrupted()) {
-            tbb::task::self().cancel_group_execution();
+            openvdb::thread::cancelGroupExecution();
         }
         const GridType& grid = UTvdbGridCast<GridType>(mGrid);
         // task local grid accessor
@@ -390,7 +389,7 @@ private:
     bool                 mThreaded;
     GU_Detail*           mGdp;
     GA_RWPageHandleType  mAttribPageHandle;
-    hvdb::Interrupter*   mInterrupter;
+    openvdb::util::NullInterrupter*   mInterrupter;
 }; // class PointSampler
 
 } // anonymous namespace
@@ -481,7 +480,7 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
         int numUnnamedGrids = 0;
 
         // start time
-        tbb::tick_count time_start = tbb::tick_count::now();
+        auto time_start = std::chrono::steady_clock::now();
         UT_AutoInterrupt progress("Sampling from VDB grids");
 
         for (hvdb::VdbPrimCIterator it(bGdp, group); it; ++it) {
@@ -538,24 +537,24 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
                         << grid.valueType() << std::endl;
                 }
 
-                hvdb::Interrupter scalarInterrupt("Sampling from VDB floating-type grids");
+                hvdb::HoudiniInterrupter scalarInterrupt("Sampling from VDB floating-type grids");
                 // do the sampling
                 if (gridType == UT_VDB_FLOAT) {
                     // float scalar
                     PointSampler<cvdb::FloatGrid, GA_RWPageHandleF> theSampler(
-                        grid, threaded, aGdp, attribHandle, &scalarInterrupt);
+                        grid, threaded, aGdp, attribHandle, &scalarInterrupt.interrupter());
                     theSampler.sample();
 
                     vdbPointsSampler.boxSample<cvdb::FloatGrid>(
-                        grid, attributeName, &scalarInterrupt);
+                        grid, attributeName, &scalarInterrupt.interrupter());
                 } else {
                     // double scalar
                     PointSampler<cvdb::DoubleGrid, GA_RWPageHandleF> theSampler(
-                        grid, threaded, aGdp, attribHandle, &scalarInterrupt);
+                        grid, threaded, aGdp, attribHandle, &scalarInterrupt.interrupter());
                     theSampler.sample();
 
                     vdbPointsSampler.boxSample<cvdb::DoubleGrid>(
-                        grid, attributeName, &scalarInterrupt);
+                        grid, attributeName, &scalarInterrupt.interrupter());
                 }
 
             } else if (gridType == UT_VDB_INT32 || gridType == UT_VDB_INT64) {
@@ -578,23 +577,23 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
                         << grid.valueType() << std::endl;
                 }
 
-                hvdb::Interrupter scalarInterrupt("Sampling from VDB integer-type grids");
+                hvdb::HoudiniInterrupter scalarInterrupt("Sampling from VDB integer-type grids");
                 if (gridType == UT_VDB_INT32) {
 
                     PointSampler<cvdb::Int32Grid, GA_RWPageHandleF, false, true>
-                        theSampler(grid, threaded, aGdp, attribHandle, &scalarInterrupt);
+                        theSampler(grid, threaded, aGdp, attribHandle, &scalarInterrupt.interrupter());
                     theSampler.sample();
 
                     vdbPointsSampler.pointSample<cvdb::Int32Grid>(
-                        grid, attributeName, &scalarInterrupt);
+                        grid, attributeName, &scalarInterrupt.interrupter());
 
                 } else {
                     PointSampler<cvdb::Int64Grid, GA_RWPageHandleF, false, true>
-                        theSampler(grid, threaded, aGdp, attribHandle, &scalarInterrupt);
+                        theSampler(grid, threaded, aGdp, attribHandle, &scalarInterrupt.interrupter());
                     theSampler.sample();
 
                     vdbPointsSampler.pointSample<cvdb::Int64Grid>(
-                        grid, attributeName, &scalarInterrupt);
+                        grid, attributeName, &scalarInterrupt.interrupter());
                 }
 
             } else if (gridType == UT_VDB_VEC3F || gridType == UT_VDB_VEC3D) {
@@ -613,7 +612,7 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
                 }
                 aGdp->addVariableName(attributeName.c_str(), attributeVariableName.c_str());
 
-                std::unique_ptr<hvdb::Interrupter> interrupter;
+                std::unique_ptr<hvdb::HoudiniInterrupter> interrupter;
 
                 // user feedback
                 if (grid.getGridClass() != cvdb::GRID_STAGGERED) {
@@ -623,18 +622,18 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
                             << grid.valueType() << std::endl;
                     }
 
-                    interrupter.reset(new hvdb::Interrupter("Sampling from VDB vector-type grids"));
+                    interrupter.reset(new hvdb::HoudiniInterrupter("Sampling from VDB vector-type grids"));
 
                     // do the sampling
                     if (gridType == UT_VDB_VEC3F) {
                         // Vec3f
                         PointSampler<cvdb::Vec3fGrid, GA_RWPageHandleV3> theSampler(
-                            grid, threaded, aGdp, attribHandle, interrupter.get());
+                            grid, threaded, aGdp, attribHandle, &interrupter->interrupter());
                         theSampler.sample();
                     } else {
                         // Vec3d
                         PointSampler<cvdb::Vec3dGrid, GA_RWPageHandleV3> theSampler(
-                            grid, threaded, aGdp, attribHandle, interrupter.get());
+                            grid, threaded, aGdp, attribHandle, &interrupter->interrupter());
                         theSampler.sample();
                     }
                 } else {
@@ -644,19 +643,19 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
                             << grid.valueType() << std::endl;
                     }
 
-                    interrupter.reset(new hvdb::Interrupter(
+                    interrupter.reset(new hvdb::HoudiniInterrupter(
                         "Sampling from VDB vector-type staggered grids"));
 
                     // do the sampling
                     if (grid.isType<cvdb::Vec3fGrid>()) {
                         // Vec3f
                         PointSampler<cvdb::Vec3fGrid, GA_RWPageHandleV3, true> theSampler(
-                            grid, threaded, aGdp, attribHandle, interrupter.get());
+                            grid, threaded, aGdp, attribHandle, &interrupter->interrupter());
                         theSampler.sample();
                     } else {
                         // Vec3d
                         PointSampler<cvdb::Vec3dGrid, GA_RWPageHandleV3, true> theSampler(
-                            grid, threaded, aGdp, attribHandle, interrupter.get());
+                            grid, threaded, aGdp, attribHandle, &interrupter->interrupter());
                         theSampler.sample();
                     }
                 }
@@ -665,10 +664,10 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
 
                 if (gridType == UT_VDB_VEC3F) {
                     vdbPointsSampler.boxSample<cvdb::Vec3fGrid>(
-                        grid, attributeName, interrupter.get());
+                        grid, attributeName, &interrupter->interrupter());
                 } else {
                     vdbPointsSampler.boxSample<cvdb::Vec3dGrid>(
-                        grid, attributeName, interrupter.get());
+                        grid, attributeName, &interrupter->interrupter());
                 }
             } else {
                 addWarning(SOP_MESSAGE, ("Skipped VDB \"" + gridName
@@ -706,15 +705,16 @@ SOP_OpenVDB_Sample_Points::Cache::cookVDBSop(OP_Context& context)
             }
         }
 
-        // timing: end time
-        tbb::tick_count time_end = tbb::tick_count::now();
-
         if (verbose) {
+            // timing: end time
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - time_start);
+            const double seconds = double(duration.count()) / 1000.0;
             std::cout << "Sampling " << nPoints + nVDBPoints << " points in "
                       << numVectorGrids << " vector grid" << (numVectorGrids == 1 ? "" : "s")
                       << " and " << numScalarGrids << " scalar grid"
                           << (numScalarGrids == 1 ? "" : "s")
-                      << " took " << (time_end - time_start).seconds() << " seconds\n "
+                      << " took " << seconds << " seconds\n "
                       << (threaded ? "threaded" : "non-threaded") << std::endl;
         }
 
